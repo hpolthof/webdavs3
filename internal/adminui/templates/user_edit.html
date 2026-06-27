@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — Edit {{.DisplayName}}</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<h2>Edit {{.DisplayName}}</h2>
+<div class="card" style="max-width:520px">
+  <form method="POST" action="/admin/users/{{.ID}}/edit">
+    <label>Display Name</label>
+    <input name="display_name" value="{{.DisplayName}}" required>
+    <div class="actions" style="margin-top:1rem">
+      <button type="submit" class="btn">Save Changes</button>
+      <a href="/admin/users/{{.ID}}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+</main>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — Users</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<div class="card-header">
+  <h2>Users</h2>
+  {{if .HasLocations}}
+  <a href="/admin/users/new" class="btn">+ Add User</a>
+  {{else}}
+  <a href="/admin/locations/new" class="btn">+ Add Location</a>
+  {{end}}
+</div>
+{{if not .HasLocations}}
+  <div class="flash flash-error">Add a WebDAV location before creating users.</div>
+{{end}}
+<div class="card">
+  <table>
+    <thead><tr><th>Name</th><th>Access Key</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+    <tbody>
+    {{range .Users}}
+    <tr>
+      <td><a href="/admin/users/{{.ID}}">{{.DisplayName}}</a></td>
+      <td><code>{{.AccessKey}}</code></td>
+      <td>{{if .Enabled}}<span class="badge badge-enabled">Enabled</span>{{else}}<span class="badge badge-disabled">Disabled</span>{{end}}</td>
+      <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+      <td>
+        <div class="actions">
+          <a href="/admin/users/{{.ID}}/edit" class="btn btn-sm btn-secondary">Edit</a>
+          <form class="inline" method="POST" action="/admin/users/{{.ID}}/delete" onsubmit="return confirm('Delete user {{.DisplayName}}?')">
+            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="5" class="empty">No users yet. {{if $.HasLocations}}<a href="/admin/users/new">Create one</a>.{{else}}Add a location first.{{end}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+</main>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — Buckets</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<div class="card-header">
+  <h2>Buckets</h2>
+  {{if .HasLocations}}
+  <a href="/admin/buckets/new" class="btn">+ Add Bucket</a>
+  {{else}}
+  <a href="/admin/locations/new" class="btn">+ Add Location</a>
+  {{end}}
+</div>
+{{if not .HasLocations}}
+  <div class="flash flash-error">Add a WebDAV location before creating buckets.</div>
+{{end}}
+<div class="card">
+  <table>
+    <thead><tr><th>Name</th><th>Owner</th><th>Location</th><th>Created</th><th>Actions</th></tr></thead>
+    <tbody>
+    {{range .Buckets}}
+    <tr>
+      <td><a href="/admin/buckets/{{.Name}}">{{.Name}}</a></td>
+      <td>{{index $.UserNames .OwnerUserID}}</td>
+      <td><code>{{.WebDAVLocationID}}</code></td>
+      <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+      <td>
+        <form class="inline" method="POST" action="/admin/buckets/{{.Name}}/delete" onsubmit="return confirm('Delete bucket {{.Name}}? This removes metadata only; objects on WebDAV are not touched.')">
+          <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="5" class="empty">No buckets yet. {{if $.HasLocations}}<a href="/admin/buckets/new">Create one</a>.{{else}}Add a location first.{{end}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+</main>
+</body>
+</html>

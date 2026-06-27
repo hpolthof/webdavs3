@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — Dashboard</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<h2>Dashboard</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem">
+  <div class="card" style="text-align:center">
+    <div class="metric">{{.LocationCount}}</div>
+    <div class="metric-label">Locations</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div class="metric">{{.UserCount}}</div>
+    <div class="metric-label">Users</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div class="metric">{{.BucketCount}}</div>
+    <div class="metric-label">Buckets</div>
+  </div>
+</div>
+<div class="card">
+  <div class="card-header"><h3 style="margin:0">Storage Locations</h3><a href="/admin/locations/new" class="btn btn-sm">+ Add Location</a></div>
+  <table>
+    <thead><tr><th>Name</th><th>URL</th><th>Usage</th><th>Quota</th><th>Used %</th></tr></thead>
+    <tbody>
+    {{range .LocationStats}}
+    <tr>
+      <td><a href="/admin/locations/{{.Location.ID}}">{{.Location.DisplayName}}</a></td>
+      <td><code>{{.Location.URL}}</code></td>
+      <td>{{humanBytes .UsageBytes}}</td>
+      <td>{{if .Location.QuotaBytes}}{{humanBytes .Location.QuotaBytes}}{{else}}Unlimited{{end}}</td>
+      <td>{{if .Location.QuotaBytes}}{{printf "%.1f" (quotaPercent .UsageBytes .Location.QuotaBytes)}}%{{else}}—{{end}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="5" class="empty">No locations configured. <a href="/admin/locations/new">Add one</a>.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <div class="card-header"><h3 style="margin:0">Quick Links</h3></div>
+  <div class="actions">
+    <a href="/admin/users/new" class="btn">Create User</a>
+    <a href="/admin/buckets/new" class="btn">Create Bucket</a>
+    <a href="/admin/users" class="btn btn-secondary">Manage Users</a>
+    <a href="/admin/buckets" class="btn btn-secondary">Manage Buckets</a>
+  </div>
+</div>
+</main>
+</body>
+</html>

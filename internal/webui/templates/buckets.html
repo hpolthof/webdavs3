@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s - Buckets</title>
+</head>
+<body>
+{{template "nav" .}}
+<main class="page">
+  <section class="page-header">
+    <div>
+      <p class="eyebrow">Workspace</p>
+      <h1>Your buckets</h1>
+      <p>Create a bucket to start uploading and organizing files.</p>
+    </div>
+  </section>
+
+  {{if .Error}}
+    <div class="flash flash-error">{{.Error}}</div>
+  {{end}}
+
+  <section class="panel panel-form">
+    {{if .HasLocations}}
+    <form method="POST" action="/buckets" class="stack-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="form-title">
+        <span class="item-icon bucket-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.2v4.7c0 4.8 3.1 8.4 7.5 10.1 4.4-1.7 7.5-5.3 7.5-10.1V6.2L12 3Zm0 2.2 5.5 2.35v3.35c0 3.45-2.05 6.25-5.5 7.95-3.45-1.7-5.5-4.5-5.5-7.95V7.55L12 5.2Zm-3 4.3h6v2H9v-2Zm0 3.5h6v2H9v-2Z"/></svg>
+        </span>
+        <label for="bucket_name">Create a new bucket</label>
+      </div>
+      <div class="input-row bucket-create-row">
+        <input id="bucket_name" name="name" placeholder="project-assets" required pattern="^[a-z0-9][a-z0-9\\-]{1,61}[a-z0-9]$">
+        <button type="submit" class="btn btn-primary btn-nowrap"><span aria-hidden="true">+</span> Create bucket</button>
+      </div>
+    </form>
+    {{else}}
+      <div class="empty-state">
+        <h2>No storage location available</h2>
+        <p>Ask an administrator to add a WebDAV location before creating buckets.</p>
+      </div>
+    {{end}}
+  </section>
+
+  {{if .Buckets}}
+  <section class="panel">
+    <table class="resource-table">
+      <thead>
+        <tr><th>Name</th><th>Created</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+      {{range .Buckets}}
+        <tr>
+          <td>
+            <a class="resource-link file-cell" href="/buckets/{{.Name}}/browse">
+              <span class="item-icon bucket-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.2v4.7c0 4.8 3.1 8.4 7.5 10.1 4.4-1.7 7.5-5.3 7.5-10.1V6.2L12 3Zm0 2.2 5.5 2.35v3.35c0 3.45-2.05 6.25-5.5 7.95-3.45-1.7-5.5-4.5-5.5-7.95V7.55L12 5.2Zm-3 4.3h6v2H9v-2Zm0 3.5h6v2H9v-2Z"/></svg>
+              </span>
+              <span class="file-name">{{.Name}}</span>
+            </a>
+          </td>
+          <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+          <td class="actions-cell">
+            <form method="POST" action="/buckets/{{.Name}}/delete" class="inline-form" onsubmit="return confirm('Delete bucket {{.Name}}?')">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="icon-button danger" title="Delete bucket" aria-label="Delete bucket">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v8h-2V9Zm4 0h2v8h-2V9ZM7 9h2l.5 10h5L15 9h2l-.6 11.1A2 2 0 0 1 14.4 22H9.6a2 2 0 0 1-2-1.9L7 9Z"/></svg>
+              </button>
+            </form>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </section>
+  {{else}}
+  <section class="panel">
+    <div class="empty-state">
+      <h2>No buckets yet</h2>
+      <p>Create your first bucket to start uploading and organizing files.</p>
+    </div>
+  </section>
+  {{end}}
+</main>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin - {{if .Title}}{{.Title}}{{else}}User Created{{end}}</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<h2>{{if .Title}}{{.Title}}{{else}}User Created{{end}}</h2>
+<div class="flash flash-success">{{if .Flash}}{{.Flash}}{{else}}Save these credentials - they are shown only once.{{end}}</div>
+<div class="card" style="max-width:560px">
+  <table>
+    <tr><th>Display Name</th><td>{{.User.DisplayName}}</td></tr>
+    <tr><th>Access Key</th><td><code>{{.AccessKey}}</code></td></tr>
+    {{if .SecretKey}}
+    <tr><th>Secret Key</th><td><code>{{.SecretKey}}</code></td></tr>
+    {{end}}
+    {{if .WebPassword}}
+    <tr><th>Web Password</th><td><code>{{.WebPassword}}</code></td></tr>
+    {{end}}
+  </table>
+</div>
+<div class="actions">
+  <a href="/admin/users/{{.User.ID}}" class="btn">View User</a>
+  <a href="/admin/users" class="btn btn-secondary">All Users</a>
+</div>
+</main>
+</body>
+</html>

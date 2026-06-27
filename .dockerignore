@@ -1,0 +1,12 @@
+.git
+.github
+.worktrees
+.claude
+.superpowers
+bin
+data
+docs
+scripts
+webdav3s.exe
+*.exe
+*.log

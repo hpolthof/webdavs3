@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s - Login</title>
+</head>
+<body class="auth-shell">
+  <main class="auth-card">
+    <div class="auth-copy">
+      <p class="eyebrow">User workspace</p>
+      <h1>Sign in to your workspace</h1>
+      <p>Use your access key and web UI password to open your buckets and manage files.</p>
+    </div>
+    {{if .Error}}
+      <div class="flash flash-error">{{.Error}}</div>
+    {{end}}
+    <form method="POST" action="/login" class="auth-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <label for="access_key">Access key</label>
+      <input id="access_key" name="access_key" required autofocus>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required>
+      <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+    </form>
+  </main>
+</body>
+</html>

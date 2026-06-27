@@ -1,0 +1,56 @@
+{{define "head"}}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/htmx.min.js"></script>
+<script src="/static/webui.js" defer></script>
+<link rel="stylesheet" href="/static/webui.css">
+{{end}}
+
+{{define "nav"}}
+<header class="webui-shell">
+  <nav class="webui-nav">
+    <a class="webui-brand" href="/">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M7.5 18.5a5 5 0 0 1-.4-9.98 6.4 6.4 0 0 1 12.15 2.25A3.9 3.9 0 0 1 18.2 18.5H7.5Zm0-3h10.7a.9.9 0 0 0 .17-1.78l-1.85-.35-.12-1.88a3.4 3.4 0 0 0-6.66-.74l-.42 1.52-1.57-.04a2 2 0 0 0-.25 3.99Z"/></svg>
+      </span>
+      <span>webdav3s</span>
+    </a>
+    <div class="webui-nav-links" aria-label="Breadcrumb">
+      <a href="/buckets">Buckets</a>
+      {{if .Bucket}}
+        <span>/</span>
+        <span>{{.Bucket.Name}}</span>
+      {{end}}
+    </div>
+    <form method="POST" action="/logout" class="webui-nav-actions">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit" class="btn btn-quiet btn-sm">Logout</button>
+    </form>
+  </nav>
+</header>
+<aside class="app-sidebar" aria-label="Workspace navigation">
+  <a class="sidebar-link {{if not .CurrentBucketName}}active{{end}}" href="/buckets">
+    <span class="sidebar-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3.2l1.8 2h6A2.5 2.5 0 0 1 20 9.5v7A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-9Z"/></svg>
+    </span>
+    Buckets
+  </a>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Bucket list</div>
+    {{range .SidebarBuckets}}
+      <a class="sidebar-link sidebar-bucket {{if eq .Name $.CurrentBucketName}}active{{end}}" href="/buckets/{{.Name}}/browse">
+        <span class="sidebar-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.2v4.7c0 4.8 3.1 8.4 7.5 10.1 4.4-1.7 7.5-5.3 7.5-10.1V6.2L12 3Zm0 2.2 5.5 2.35v3.35c0 3.45-2.05 6.25-5.5 7.95-3.45-1.7-5.5-4.5-5.5-7.95V7.55L12 5.2Zm-3 4.3h6v2H9v-2Zm0 3.5h6v2H9v-2Z"/></svg>
+        </span>
+        <span>{{.Name}}</span>
+      </a>
+    {{else}}
+      <p class="sidebar-empty">No buckets yet.</p>
+    {{end}}
+  </div>
+  <div class="storage-card" aria-label="Storage used">
+    <span>Stored</span>
+    <strong>{{.StorageUsedBytes | humanBytes}}</strong>
+  </div>
+</aside>
+{{end}}

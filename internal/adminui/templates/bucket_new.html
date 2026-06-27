@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — New Bucket</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<h2>Add Bucket</h2>
+<div class="card" style="max-width:520px">
+  {{if .Locations}}
+  <form method="POST" action="/admin/buckets/new">
+    <label>Bucket Name</label>
+    <input name="name" required pattern="^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$" title="3-63 lowercase letters, digits, or hyphens; must start and end with letter or digit">
+    <label>Owner</label>
+    <select name="owner_user_id" required>
+      {{range .Users}}
+      <option value="{{.ID}}">{{.DisplayName}} ({{.AccessKey}})</option>
+      {{else}}
+      <option value="" disabled>No users available</option>
+      {{end}}
+    </select>
+    <label>WebDAV Location</label>
+    <select name="location_id" required>
+      {{range .Locations}}
+      <option value="{{.ID}}">{{.DisplayName}} — {{.URL}}</option>
+      {{else}}
+      <option value="" disabled>No locations available</option>
+      {{end}}
+    </select>
+    <div class="actions" style="margin-top:1rem">
+      <button type="submit" class="btn">Create Bucket</button>
+      <a href="/admin/buckets" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+  {{else}}
+    <p class="empty">Add a WebDAV location before creating buckets.</p>
+    <div class="actions" style="margin-top:1rem">
+      <a href="/admin/locations/new" class="btn">Add Location</a>
+      <a href="/admin/buckets" class="btn btn-secondary">Cancel</a>
+    </div>
+  {{end}}
+</div>
+</main>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — {{.Location.DisplayName}}</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<h2>{{.Location.DisplayName}}</h2>
+<div class="card">
+  <table style="max-width:560px">
+    <tr><th>URL</th><td><code>{{.Location.URL}}</code></td></tr>
+    <tr><th>Username</th><td>{{.Location.Username}}</td></tr>
+    <tr><th>Base Directory</th><td><code>{{.Location.BaseDir}}</code></td></tr>
+    <tr><th>Quota</th><td>{{if .Location.QuotaBytes}}{{humanBytes .Location.QuotaBytes}}{{else}}Unlimited{{end}}</td></tr>
+    <tr><th>Usage</th><td>{{humanBytes .UsageBytes}}</td></tr>
+    <tr><th>Created</th><td>{{.Location.CreatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+  </table>
+</div>
+<div class="actions">
+  <button class="btn" hx-post="/admin/locations/{{.Location.ID}}/sync" hx-swap="outerHTML" hx-confirm="Sync structure.db from this WebDAV location?">Sync Now</button>
+  <a href="/admin/locations/{{.Location.ID}}/edit" class="btn btn-secondary">Edit</a>
+  <form class="inline" method="POST" action="/admin/locations/{{.Location.ID}}/delete" onsubmit="return confirm('Delete this location? This does not remove data from WebDAV.')">
+    <button type="submit" class="btn btn-danger">Delete</button>
+  </form>
+</div>
+</main>
+</body>
+</html>

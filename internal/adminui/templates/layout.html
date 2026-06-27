@@ -1,0 +1,19 @@
+{{define "head"}}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/admin/static/htmx.min.js"></script>
+<link rel="stylesheet" href="/admin/static/admin.css">
+{{end}}
+
+{{define "nav"}}
+<nav>
+  <strong>webdav3s</strong>
+  <a href="/admin/">Dashboard</a>
+  <a href="/admin/locations">Locations</a>
+  <a href="/admin/users">Users</a>
+  <a href="/admin/buckets">Buckets</a>
+  <form method="POST" action="/admin/logout" style="margin-left:auto">
+    <button type="submit" class="btn btn-sm">Logout</button>
+  </form>
+</nav>
+{{end}}

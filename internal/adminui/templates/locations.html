@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — Locations</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<div class="card-header">
+  <h2>WebDAV Locations</h2>
+  <a href="/admin/locations/new" class="btn">+ Add Location</a>
+</div>
+<div class="card">
+  <table>
+    <thead><tr><th>Name</th><th>URL</th><th>Quota</th><th>Created</th><th>Actions</th></tr></thead>
+    <tbody>
+    {{range .Locations}}
+    <tr>
+      <td><a href="/admin/locations/{{.ID}}">{{.DisplayName}}</a></td>
+      <td><code>{{.URL}}</code></td>
+      <td>{{if .QuotaBytes}}{{humanBytes .QuotaBytes}}{{else}}Unlimited{{end}}</td>
+      <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+      <td>
+        <div class="actions">
+          <a href="/admin/locations/{{.ID}}/edit" class="btn btn-sm btn-secondary">Edit</a>
+          <form class="inline" method="POST" action="/admin/locations/{{.ID}}/delete" onsubmit="return confirm('Delete this location? This does not remove data from WebDAV.')">
+            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="5" class="empty">No locations configured. <a href="/admin/locations/new">Add one</a>.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+</main>
+</body>
+</html>

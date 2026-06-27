@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — New Location</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<h2>Add WebDAV Location</h2>
+<div class="card" style="max-width:520px">
+  <form method="POST" action="/admin/locations/new">
+    <label>Display Name</label>
+    <input name="display_name" required>
+    <label>WebDAV URL</label>
+    <input name="url" type="url" required>
+    <label>Username</label>
+    <input name="username" required>
+    <label>Password</label>
+    <input name="password" type="password" required>
+    <label>Base Directory</label>
+    <input name="base_dir" placeholder="/" value="/">
+    <small>Optional subdirectory for storage. Examples: <code>backup</code>, <code>/data/</code>. Default: <code>/</code></small>
+    <label>Quota (GB, 0 = unlimited)</label>
+    <input name="quota_gb" type="number" min="0" value="0">
+    <div class="actions" style="margin-top:1rem">
+      <button type="submit" class="btn">Create Location</button>
+      <button type="button" class="btn btn-secondary" hx-post="/admin/locations/test" hx-include="closest form" hx-target="#test-result" hx-swap="innerHTML">Test Connection</button>
+      <a href="/admin/locations" class="btn btn-secondary">Cancel</a>
+    </div>
+    <div id="test-result" style="margin-top:.75rem"></div>
+  </form>
+</div>
+</main>
+</body>
+</html>

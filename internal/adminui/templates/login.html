@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>webdav3s Admin — Login</title>
+  <link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh">
+  <div class="card" style="width:100%;max-width:360px">
+    <h2 style="text-align:center;margin-bottom:1.5rem">webdav3s Admin</h2>
+    <form method="POST" action="/admin/login">
+      <label>Username</label>
+      <input name="username" required autofocus>
+      <label>Password</label>
+      <input name="password" type="password" required>
+      <button type="submit" class="btn" style="width:100%;margin-top:1rem">Login</button>
+    </form>
+  </div>
+</body>
+</html>

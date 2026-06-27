@@ -1,0 +1,8 @@
+*.exe
+dist/
+.worktrees/
+data/
+bin/
+config.yaml
+provision.yaml
+.env

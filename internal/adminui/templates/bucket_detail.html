@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — Bucket {{.Name}}</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<h2>Bucket {{.Name}}</h2>
+<div class="card">
+  <table style="max-width:560px">
+    <tr><th>ID</th><td><code>{{.ID}}</code></td></tr>
+    <tr><th>Owner User ID</th><td><code>{{.OwnerUserID}}</code></td></tr>
+    <tr><th>WebDAV Location ID</th><td><code>{{.WebDAVLocationID}}</code></td></tr>
+    <tr><th>Created</th><td>{{.CreatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+  </table>
+</div>
+<div class="actions">
+  <form class="inline" method="POST" action="/admin/buckets/{{.Name}}/delete" onsubmit="return confirm('Delete bucket {{.Name}}? This removes metadata only; objects on WebDAV are not touched.')">
+    <button type="submit" class="btn btn-danger">Delete Bucket</button>
+  </form>
+  <a href="/admin/buckets" class="btn btn-secondary">All Buckets</a>
+</div>
+</main>
+</body>
+</html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — New User</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<h2>Add User</h2>
+{{if .Error}}
+  <div class="flash flash-error">{{.Error}}</div>
+{{end}}
+<div class="card" style="max-width:520px">
+  {{if .HasLocations}}
+  <form method="POST" action="/admin/users/new">
+    <label>Display Name</label>
+    <input name="display_name" required>
+    <div class="actions" style="margin-top:1rem">
+      <button type="submit" class="btn">Generate Credentials &amp; Create</button>
+      <a href="/admin/users" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+  {{else}}
+    <p class="empty">Add a WebDAV location before creating users.</p>
+    <div class="actions" style="margin-top:1rem">
+      <a href="/admin/locations/new" class="btn">Add Location</a>
+      <a href="/admin/users" class="btn btn-secondary">Cancel</a>
+    </div>
+  {{end}}
+</div>
+</main>
+</body>
+</html>

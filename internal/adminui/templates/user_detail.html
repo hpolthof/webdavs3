@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <title>webdav3s Admin — {{.User.DisplayName}}</title>
+</head>
+<body>
+{{template "nav" .}}
+<main>
+<h2>{{.User.DisplayName}}</h2>
+<div class="card">
+  <table style="max-width:560px">
+    <tr><th>Access Key</th><td><code>{{.User.AccessKey}}</code></td></tr>
+    <tr><th>Status</th><td>
+      {{if .User.Enabled}}<span class="badge badge-enabled">Enabled</span>{{else}}<span class="badge badge-disabled">Disabled</span>{{end}}
+    </td></tr>
+    <tr><th>Created</th><td>{{.User.CreatedAt.Format "2006-01-02 15:04:05"}}</td></tr>
+  </table>
+</div>
+<div class="actions">
+  <a href="/admin/users/{{.User.ID}}/edit" class="btn btn-secondary">Edit</a>
+  <form class="inline" method="POST" action="/admin/users/{{.User.ID}}/toggle">
+    {{if .User.Enabled}}
+      <button type="submit" class="btn btn-danger">Disable User</button>
+    {{else}}
+      <button type="submit" class="btn">Enable User</button>
+    {{end}}
+  </form>
+  <form class="inline" method="POST" action="/admin/users/{{.User.ID}}/regenerate" onsubmit="return confirm('Regenerate secret key for {{.User.DisplayName}}? The old key will stop working immediately.')">
+    <button type="submit" class="btn btn-secondary">Regenerate Secret</button>
+  </form>
+  <form class="inline" method="POST" action="/admin/users/{{.User.ID}}/reset-password" onsubmit="return confirm('Reset web password for {{.User.DisplayName}}? The old password will stop working immediately.')">
+    <button type="submit" class="btn btn-secondary">Reset Web Password</button>
+  </form>
+  <form class="inline" method="POST" action="/admin/users/{{.User.ID}}/delete" onsubmit="return confirm('Delete user {{.User.DisplayName}}?')">
+    <button type="submit" class="btn btn-danger">Delete User</button>
+  </form>
+</div>
+<h3>Buckets</h3>
+{{if .Buckets}}
+<div class="card">
+  <table>
+    <thead><tr><th>Name</th><th>Location</th><th>Created</th></tr></thead>
+    <tbody>
+    {{range .Buckets}}
+    <tr>
+      <td><a href="/admin/buckets/{{.Name}}">{{.Name}}</a></td>
+      <td><code>{{.WebDAVLocationID}}</code></td>
+      <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<p class="empty">No buckets owned by this user.</p>
+{{end}}
+</main>
+</body>
+</html>
