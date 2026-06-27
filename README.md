@@ -284,6 +284,26 @@ volumes:
   webdavs3-cache:
 ```
 
+Quick start with the published image:
+
+```bash
+docker pull ghcr.io/hpolthof/webdavs3:latest
+docker run -d \
+  --name webdavs3 \
+  -p 9000:9000 \
+  -p 9001:9001 \
+  -e WEBDAV3S_ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+  -e WEBDAV3S_ADMIN_USERNAME="admin" \
+  -e WEBDAV3S_ADMIN_PASSWORD_HASH="$ADMIN_PASSWORD_HASH" \
+  -e WEBDAV3S_LOCAL_CACHE_DIR="/data/cache" \
+  -e WEBDAV3S_PROVISION_FILE="/run/config/provision.yaml" \
+  -v webdavs3-cache:/data/cache \
+  -v "$(pwd)/provision.yaml:/run/config/provision.yaml:ro" \
+  ghcr.io/hpolthof/webdavs3:latest
+```
+
+If you prefer Compose, keep the tag pinned to a release such as `ghcr.io/hpolthof/webdavs3:1.0.0` and only move it when you want to upgrade. Release tags publish semver image tags like `:1`, `:1.0`, and `:1.0.0`; `master` also publishes `:latest`, and every build gets a short `:sha-<commit>` tag for traceability.
+
 For Docker, Coolify, and similar platforms, mount `provision.yaml` as a read-only file inside the container and point `WEBDAV3S_PROVISION_FILE` at that path. Use this only for first boot of a fresh `local_cache_dir`; once the instance has been provisioned, the next startup with the same cache directory will fail if the file is still enforced against existing state.
 
 The runtime image is `scratch`, so there is no shell or package manager in the final container. Use `docker logs` for inspection, or build a temporary debug image from the same Dockerfile builder stage if you need an interactive troubleshooting shell.
