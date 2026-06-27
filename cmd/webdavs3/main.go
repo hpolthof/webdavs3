@@ -198,7 +198,7 @@ func runDaemon(ctx context.Context, cfgPath string) error {
 	refreshWebDAV()
 
 	// 9. Init services.
-	syncEngine := msync.NewWithEncryptionAndCacheDir(wdc, structDB, statsDB, daemonID, cfg.LocalCacheDir, cfg.EncryptionKey, adminui.DecryptPassword)
+	syncEngine := msync.NewWithEncryptionAndCacheDirAndBucketEvictor(wdc, structDB, statsDB, daemonID, cfg.LocalCacheDir, cfg.EncryptionKey, adminui.DecryptPassword, bucketCache.Remove)
 	verifier := auth.NewVerifier(cfg.Region, "s3")
 	quotaSvc := quota.New(structDB, statsDB)
 
@@ -367,6 +367,17 @@ func runDaemon(ctx context.Context, cfgPath string) error {
 	defer shutCancel()
 	_ = s3Server.Shutdown(shutCtx)
 	_ = adminServer.Shutdown(shutCtx)
+
+	// Final metadata flush on graceful shutdown.
+	metaFlushCtx, metaFlushCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer metaFlushCancel()
+	if err := syncEngine.FlushStructure(metaFlushCtx); err != nil {
+		slog.Warn("final structure flush failed", "err", err)
+	}
+	bucketCache.CloseAll()
+	if err := syncEngine.FlushBucketDBs(metaFlushCtx); err != nil {
+		slog.Warn("final bucket metadata flush failed", "err", err)
+	}
 
 	// Final stats flush on shutdown.
 	flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)

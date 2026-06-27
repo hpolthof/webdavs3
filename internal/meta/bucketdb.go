@@ -506,3 +506,22 @@ func (b *bucketDB) SaveToFile(path string) error {
 	_, err := b.db.Exec(`VACUUM INTO ?`, path)
 	return err
 }
+
+// ValidateBucketDBFile verifies that path is a readable SQLite database before
+// callers replace a local bucket metadata file with it.
+func ValidateBucketDBFile(path string) error {
+	db, err := openSQLite(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	var result string
+	if err := db.QueryRow(`PRAGMA integrity_check`).Scan(&result); err != nil {
+		return fmt.Errorf("integrity_check bucket db: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("integrity_check bucket db: %s", result)
+	}
+	return nil
+}

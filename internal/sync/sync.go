@@ -45,6 +45,7 @@ type Engine interface {
 	// is not found. A non-nil error means an I/O or parse failure.
 	FindRemoteLocationID(ctx context.Context, locationID string) (remoteID string, found bool, err error)
 	FlushStructure(ctx context.Context) error
+	FlushBucketDBs(ctx context.Context) error
 	FlushStats(ctx context.Context) error
 }
 
@@ -57,6 +58,7 @@ type engine struct {
 	encryptionKey     string
 	decryptPassword   func(encrypted, key string) (string, error)
 	newLocationClient func(url, username, password string) wdv.Client
+	evictBucket       func(bucketID string)
 }
 
 // New creates a sync Engine using the provided client for all operations.
@@ -78,6 +80,12 @@ func NewWithEncryption(wdc wdv.Client, structure meta.StructureDB, stats meta.St
 // NewWithEncryptionAndCacheDir creates a sync Engine that also restores bucket
 // metadata files into localCacheDir during SyncFromWebDAV.
 func NewWithEncryptionAndCacheDir(wdc wdv.Client, structure meta.StructureDB, stats meta.StatsDB, daemonID, localCacheDir, encryptionKey string, decryptPassword func(encrypted, key string) (string, error)) Engine {
+	return NewWithEncryptionAndCacheDirAndBucketEvictor(wdc, structure, stats, daemonID, localCacheDir, encryptionKey, decryptPassword, nil)
+}
+
+// NewWithEncryptionAndCacheDirAndBucketEvictor creates a sync Engine that can
+// evict open bucket databases before replacing their local files.
+func NewWithEncryptionAndCacheDirAndBucketEvictor(wdc wdv.Client, structure meta.StructureDB, stats meta.StatsDB, daemonID, localCacheDir, encryptionKey string, decryptPassword func(encrypted, key string) (string, error), evictBucket func(bucketID string)) Engine {
 	return &engine{
 		wdc:               wdc,
 		structure:         structure,
@@ -87,6 +95,7 @@ func NewWithEncryptionAndCacheDir(wdc wdv.Client, structure meta.StructureDB, st
 		encryptionKey:     encryptionKey,
 		decryptPassword:   decryptPassword,
 		newLocationClient: func(url, username, password string) wdv.Client { return wdv.New(url, username, password) },
+		evictBucket:       evictBucket,
 	}
 }
 
@@ -108,6 +117,18 @@ func NewWithClientFactoryAndCacheDir(wdc wdv.Client, structure meta.StructureDB,
 	}
 }
 
+func (e *engine) clientForLocation(loc meta.Location) (wdv.Client, error) {
+	password := loc.PasswordEnc
+	if e.decryptPassword != nil && e.encryptionKey != "" {
+		var err error
+		password, err = e.decryptPassword(loc.PasswordEnc, e.encryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt password: %w", err)
+		}
+	}
+	return e.newLocationClient(loc.URL, loc.Username, password), nil
+}
+
 // SyncFromWebDAV downloads structure.db from the specified WebDAV location and merges
 // remote records into the local StructureDB. Existing local records win on
 // conflict (same ID/name). Remote-only records are imported.
@@ -119,17 +140,11 @@ func (e *engine) SyncFromWebDAV(ctx context.Context, locationID string) error {
 		return fmt.Errorf("get location %s: %w", locationID, err)
 	}
 
-	// Decrypt password if needed.
-	password := loc.PasswordEnc
-	if e.decryptPassword != nil && e.encryptionKey != "" {
-		password, err = e.decryptPassword(loc.PasswordEnc, e.encryptionKey)
-		if err != nil {
-			return fmt.Errorf("decrypt password: %w", err)
-		}
-	}
-
 	// Create a location-specific WebDAV client.
-	locClient := e.newLocationClient(loc.URL, loc.Username, password)
+	locClient, err := e.clientForLocation(loc)
+	if err != nil {
+		return err
+	}
 
 	// Ensure the _meta directory exists on WebDAV under the location's base directory.
 	metaDir := fmt.Sprintf("%s_meta/", loc.BaseDir)
@@ -185,15 +200,10 @@ func (e *engine) FindRemoteLocationID(ctx context.Context, locationID string) (s
 		return "", false, fmt.Errorf("get location %s: %w", locationID, err)
 	}
 
-	password := loc.PasswordEnc
-	if e.decryptPassword != nil && e.encryptionKey != "" {
-		password, err = e.decryptPassword(loc.PasswordEnc, e.encryptionKey)
-		if err != nil {
-			return "", false, fmt.Errorf("decrypt password: %w", err)
-		}
+	locClient, err := e.clientForLocation(loc)
+	if err != nil {
+		return "", false, err
 	}
-
-	locClient := e.newLocationClient(loc.URL, loc.Username, password)
 
 	tmp, err := os.CreateTemp(e.localCacheDir, "structure-probe-*.db")
 	if err != nil {
@@ -345,11 +355,28 @@ func (e *engine) syncBucketDBs(ctx context.Context, locClient wdv.Client, remote
 
 		localPath := filepath.Join(e.localCacheDir, "bucket-"+b.ID+".db")
 		remotePath := fmt.Sprintf("%s_meta/%s.db", baseDir, b.ID)
-		if err := locClient.DownloadToFile(ctx, remotePath, localPath); err != nil {
+		tmp, err := os.CreateTemp(e.localCacheDir, "bucket-sync-*.db")
+		if err != nil {
+			return fmt.Errorf("create temp bucket sync: %w", err)
+		}
+		tmpPath := tmp.Name()
+		tmp.Close()
+		defer os.Remove(tmpPath)
+
+		if err := locClient.DownloadToFile(ctx, remotePath, tmpPath); err != nil {
 			if isNotFound(err) {
 				continue
 			}
 			return fmt.Errorf("download bucket db %s: %w", b.ID, err)
+		}
+		if err := meta.ValidateBucketDBFile(tmpPath); err != nil {
+			return fmt.Errorf("validate bucket db %s from webdav: %w", b.ID, err)
+		}
+		if e.evictBucket != nil {
+			e.evictBucket(b.ID)
+		}
+		if err := replaceFile(tmpPath, localPath); err != nil {
+			return fmt.Errorf("replace local bucket db %s: %w", b.ID, err)
 		}
 	}
 	return nil
@@ -421,9 +448,102 @@ func (e *engine) FlushStructure(ctx context.Context) error {
 	return nil
 }
 
+// FlushBucketDBs uploads every local bucket metadata database to its WebDAV
+// location. It is intended for graceful shutdown after request handling stops.
+func (e *engine) FlushBucketDBs(ctx context.Context) error {
+	if e.localCacheDir == "" {
+		return nil
+	}
+	buckets, err := e.structure.ListBuckets()
+	if err != nil {
+		return fmt.Errorf("list buckets for flush: %w", err)
+	}
+	for _, b := range buckets {
+		localPath := filepath.Join(e.localCacheDir, "bucket-"+b.ID+".db")
+		if _, err := os.Stat(localPath); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("stat bucket db %s: %w", b.ID, err)
+		}
+
+		bdb, err := meta.OpenBucketDB(localPath)
+		if err != nil {
+			return fmt.Errorf("open bucket db %s for flush: %w", b.ID, err)
+		}
+
+		tmp, err := os.CreateTemp(e.localCacheDir, "bucket-flush-*.db")
+		if err != nil {
+			bdb.Close()
+			return fmt.Errorf("create temp bucket flush: %w", err)
+		}
+		tmpPath := tmp.Name()
+		tmp.Close()
+		os.Remove(tmpPath)
+
+		if err := bdb.SaveToFile(tmpPath); err != nil {
+			bdb.Close()
+			os.Remove(tmpPath)
+			return fmt.Errorf("save bucket db %s: %w", b.ID, err)
+		}
+		if err := bdb.Close(); err != nil {
+			os.Remove(tmpPath)
+			return fmt.Errorf("close bucket db %s: %w", b.ID, err)
+		}
+
+		loc, err := e.structure.GetLocation(b.WebDAVLocationID)
+		if err != nil {
+			os.Remove(tmpPath)
+			return fmt.Errorf("get location for bucket %s: %w", b.ID, err)
+		}
+		locClient, err := e.clientForLocation(loc)
+		if err != nil {
+			os.Remove(tmpPath)
+			return err
+		}
+
+		remotePath := fmt.Sprintf("%s_meta/%s.db", loc.BaseDir, b.ID)
+		if err := locClient.UploadFromFile(ctx, remotePath, tmpPath); err != nil {
+			os.Remove(tmpPath)
+			return fmt.Errorf("upload bucket db %s: %w", b.ID, err)
+		}
+		os.Remove(tmpPath)
+	}
+	return nil
+}
+
 // FlushStats uploads the local stats database to WebDAV at the daemon-specific path.
 func (e *engine) FlushStats(ctx context.Context) error {
 	baseDir := e.primaryBaseDir()
 	remotePath := fmt.Sprintf("%s_meta/stats-%s.db", baseDir, e.daemonID)
 	return e.stats.Flush(ctx, e.wdc, remotePath)
+}
+
+func replaceFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+
+	backup := dst + ".bak"
+	_ = os.Remove(backup)
+	hadExisting := false
+	if _, err := os.Stat(dst); err == nil {
+		hadExisting = true
+		if err := os.Rename(dst, backup); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.Rename(src, dst); err != nil {
+		if hadExisting {
+			_ = os.Rename(backup, dst)
+		}
+		return err
+	}
+	if hadExisting {
+		_ = os.Remove(backup)
+	}
+	return nil
 }

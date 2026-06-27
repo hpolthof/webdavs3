@@ -177,6 +177,56 @@ func TestEngine_FlushStructure(t *testing.T) {
 	}
 }
 
+func TestEngine_FlushBucketDBs(t *testing.T) {
+	wdc := newMockWDV()
+	cacheDir := t.TempDir()
+	bucketID := "bucket-local"
+
+	localDB, _ := meta.OpenStructureDB(":memory:")
+	localDB.AddLocation(meta.Location{
+		ID: "loc-local", URL: "http://dav", Username: "u",
+		PasswordEnc: "e", DisplayName: "Local", QuotaBytes: 1e9,
+		BaseDir: "/base/", CreatedAt: time.Now(),
+	})
+	localDB.AddBucket(meta.Bucket{
+		ID: bucketID, Name: "local-bucket", OwnerUserID: "u-local",
+		WebDAVLocationID: "loc-local", CreatedAt: time.Now(),
+	})
+	statsDB, _ := meta.OpenStatsDB(":memory:", "daemon-bucket-flush")
+	defer localDB.Close()
+	defer statsDB.Close()
+
+	localBucketDB, _ := meta.OpenBucketDB(filepath.Join(cacheDir, "bucket-"+bucketID+".db"))
+	localBucketDB.PutObject(meta.Object{
+		ID: "obj-local", Key: "local.txt", HashPath: "/base/_data/local",
+		SizeBytes: 5, ETag: "etag", ContentType: "text/plain",
+		LastModified: time.Now(), UploadComplete: true,
+	})
+	localBucketDB.Close()
+
+	eng := msync.NewWithClientFactoryAndCacheDir(wdc, localDB, statsDB, "daemon-bucket-flush", cacheDir, func(_, _, _ string) wdv.Client { return wdc })
+	if err := eng.FlushBucketDBs(context.Background()); err != nil {
+		t.Fatalf("FlushBucketDBs: %v", err)
+	}
+
+	remoteData, ok := wdc.files["/base/_meta/"+bucketID+".db"]
+	if !ok {
+		t.Fatal("expected bucket db uploaded to WebDAV")
+	}
+	remotePath := filepath.Join(t.TempDir(), "remote-bucket.db")
+	if err := os.WriteFile(remotePath, remoteData, 0600); err != nil {
+		t.Fatalf("write remote bucket db: %v", err)
+	}
+	remoteBucketDB, err := meta.OpenBucketDB(remotePath)
+	if err != nil {
+		t.Fatalf("open remote bucket db: %v", err)
+	}
+	defer remoteBucketDB.Close()
+	if _, err := remoteBucketDB.GetObject("local.txt"); err != nil {
+		t.Fatalf("expected uploaded object metadata: %v", err)
+	}
+}
+
 func TestEngine_SyncFromWebDAV_MergeLocalWins(t *testing.T) {
 	// Build a remote structure.db with a location and a user.
 	srcDB, _ := meta.OpenStructureDB(":memory:")
@@ -350,6 +400,62 @@ func TestEngine_SyncFromWebDAV_RemapSameLocationAndDownloadBucketDB(t *testing.T
 	defer localBucketDB.Close()
 	if _, err := localBucketDB.GetObject("hello.txt"); err != nil {
 		t.Fatalf("expected synced bucket object metadata: %v", err)
+	}
+}
+
+func TestEngine_SyncFromWebDAV_InvalidRemoteBucketDBPreservesLocal(t *testing.T) {
+	bucketID := "bucket-corrupt"
+
+	srcDB, _ := meta.OpenStructureDB(":memory:")
+	srcDB.AddLocation(meta.Location{
+		ID: "loc-remote", URL: "http://dav/root/", Username: "u",
+		PasswordEnc: "old", DisplayName: "Old", QuotaBytes: 1e9, CreatedAt: time.Now(),
+	})
+	srcDB.AddBucket(meta.Bucket{
+		ID: bucketID, Name: "kept-bucket", OwnerUserID: "u-old",
+		WebDAVLocationID: "loc-remote", CreatedAt: time.Now(),
+	})
+
+	wdc := newMockWDV()
+	tmp, _ := os.CreateTemp(t.TempDir(), "struct*.db")
+	tmp.Close()
+	srcDB.SaveToFile(tmp.Name())
+	data, _ := os.ReadFile(tmp.Name())
+	wdc.files["/_meta/structure.db"] = data
+	srcDB.Close()
+	wdc.files["/_meta/"+bucketID+".db"] = []byte("not a sqlite database")
+
+	cacheDir := t.TempDir()
+	localBucketPath := filepath.Join(cacheDir, "bucket-"+bucketID+".db")
+	localBucketDB, _ := meta.OpenBucketDB(localBucketPath)
+	localBucketDB.PutObject(meta.Object{
+		ID: "obj-local", Key: "local.txt", HashPath: "/_data/local",
+		SizeBytes: 5, ETag: "etag", ContentType: "text/plain",
+		LastModified: time.Now(), UploadComplete: true,
+	})
+	localBucketDB.Close()
+
+	localDB, _ := meta.OpenStructureDB(":memory:")
+	localDB.AddLocation(meta.Location{
+		ID: "loc-local", URL: "http://dav/root", Username: "u",
+		PasswordEnc: "new", DisplayName: "New", QuotaBytes: 1e9, CreatedAt: time.Now(),
+	})
+	statsDB, _ := meta.OpenStatsDB(":memory:", "daemon-corrupt")
+	defer localDB.Close()
+	defer statsDB.Close()
+
+	eng := msync.NewWithClientFactoryAndCacheDir(wdc, localDB, statsDB, "daemon-corrupt", cacheDir, func(_, _, _ string) wdv.Client { return wdc })
+	if err := eng.SyncFromWebDAV(context.Background(), "loc-local"); err == nil {
+		t.Fatal("SyncFromWebDAV succeeded with invalid remote bucket db")
+	}
+
+	keptDB, err := meta.OpenBucketDB(localBucketPath)
+	if err != nil {
+		t.Fatalf("local bucket db was corrupted: %v", err)
+	}
+	defer keptDB.Close()
+	if _, err := keptDB.GetObject("local.txt"); err != nil {
+		t.Fatalf("local object metadata was not preserved: %v", err)
 	}
 }
 
