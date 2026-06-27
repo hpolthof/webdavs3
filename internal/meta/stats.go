@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	wdv "github.com/hpolthof/webdav3s/internal/webdav"
+	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
 // StatsDB tracks byte and object-count deltas locally before flushing to WebDAV.

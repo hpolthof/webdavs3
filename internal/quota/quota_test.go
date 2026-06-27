@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	"github.com/hpolthof/webdav3s/internal/quota"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/quota"
 )
 
 func TestQuota_UnderLimit(t *testing.T) {

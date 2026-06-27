@@ -9,18 +9,18 @@ import (
 	"testing"
 	"time"
 
-	ourwebdav "github.com/hpolthof/webdav3s/internal/webdav"
+	ourwebdav "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
 // mockFileInfo implements os.FileInfo with a fixed size.
 type mockFileInfo struct{ size int64 }
 
-func (m mockFileInfo) Name() string      { return "" }
-func (m mockFileInfo) Size() int64       { return m.size }
-func (m mockFileInfo) Mode() os.FileMode { return 0 }
+func (m mockFileInfo) Name() string       { return "" }
+func (m mockFileInfo) Size() int64        { return m.size }
+func (m mockFileInfo) Mode() os.FileMode  { return 0 }
 func (m mockFileInfo) ModTime() time.Time { return time.Time{} }
-func (m mockFileInfo) IsDir() bool       { return false }
-func (m mockFileInfo) Sys() interface{}  { return nil }
+func (m mockFileInfo) IsDir() bool        { return false }
+func (m mockFileInfo) Sys() interface{}   { return nil }
 
 // mockClient is a Client stub for retry tests.
 type mockClient struct {
@@ -57,7 +57,7 @@ func (m *mockClient) Exists(_ context.Context, _ string) (bool, error) {
 	return false, nil
 }
 func (m *mockClient) Rename(_ context.Context, _, _ string, _ bool) error { return nil }
-func (m *mockClient) DownloadToFile(_ context.Context, _, _ string) error  { return nil }
+func (m *mockClient) DownloadToFile(_ context.Context, _, _ string) error { return nil }
 func (m *mockClient) ReadDir(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }

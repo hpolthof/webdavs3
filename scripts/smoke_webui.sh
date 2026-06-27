@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # smoke_webui.sh — end-to-end web UI smoke test.
 # Prerequisites:
-#   - webdav3s binary running with admin + web UI on ADMIN_ENDPOINT.
+#   - webdavs3 binary running with admin + web UI on ADMIN_ENDPOINT.
 #   - ADMIN_USER and ADMIN_PASS set to the admin UI credentials.
 #   - curl and grep available.
 #

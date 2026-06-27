@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	msync "github.com/hpolthof/webdav3s/internal/sync"
-	wdv "github.com/hpolthof/webdav3s/internal/webdav"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	msync "github.com/hpolthof/webdavs3/internal/sync"
+	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
 // mockWDV is a minimal in-memory WebDAV client for testing.
@@ -85,7 +85,7 @@ func (m *mockWDV) ReadDir(_ context.Context, dir string) ([]string, error) {
 	}
 	return names, nil
 }
-func (m *mockWDV) Ping(_ context.Context) error { return nil }
+func (m *mockWDV) Ping(_ context.Context) error                          { return nil }
 func (m *mockWDV) Stat(_ context.Context, _ string) (os.FileInfo, error) { return nil, nil }
 
 var _ wdv.Client = (*mockWDV)(nil)

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	wdv "github.com/hpolthof/webdav3s/internal/webdav"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
 // mockWebDAV implements wdv.Client in-memory for testing Flush.
@@ -67,7 +67,7 @@ func (m *mockWebDAV) UploadFromFile(_ context.Context, path, src string) error {
 	return nil
 }
 func (m *mockWebDAV) ReadDir(_ context.Context, _ string) ([]string, error) { return nil, nil }
-func (m *mockWebDAV) Ping(_ context.Context) error { return nil }
+func (m *mockWebDAV) Ping(_ context.Context) error                          { return nil }
 func (m *mockWebDAV) Stat(_ context.Context, _ string) (os.FileInfo, error) { return nil, nil }
 
 var _ wdv.Client = (*mockWebDAV)(nil)

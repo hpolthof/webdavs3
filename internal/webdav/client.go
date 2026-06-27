@@ -55,7 +55,7 @@ func (a *preemptiveBasicAuth) Verify(_ *http.Client, rs *http.Response, _ string
 }
 
 func (a *preemptiveBasicAuth) Clone() gowebdav.Authenticator { return a }
-func (a *preemptiveBasicAuth) Close() error                   { return nil }
+func (a *preemptiveBasicAuth) Close() error                  { return nil }
 
 // New creates a new ClientImpl for the given WebDAV root URL.
 // It prefers preemptive Basic auth so request bodies can be streamed without

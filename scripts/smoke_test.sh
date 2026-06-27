@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # smoke_test.sh — end-to-end S3 API smoke test using the aws CLI.
 # Prerequisites:
-#   - webdav3s binary running at ENDPOINT with test credentials in env.
+#   - webdavs3 binary running at ENDPOINT with test credentials in env.
 #   - AWS CLI installed and in PATH.
 #   - TEST_ACCESS_KEY and TEST_SECRET_KEY set in environment.
 #

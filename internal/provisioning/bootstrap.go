@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/adminui"
-	"github.com/hpolthof/webdav3s/internal/bucket"
-	"github.com/hpolthof/webdav3s/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/adminui"
+	"github.com/hpolthof/webdavs3/internal/bucket"
+	"github.com/hpolthof/webdavs3/internal/meta"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/yaml.v3"
 )

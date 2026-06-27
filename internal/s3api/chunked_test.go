@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hpolthof/webdav3s/internal/auth"
+	"github.com/hpolthof/webdavs3/internal/auth"
 )
 
 func TestAWSChunkedReader_DecodeWithoutVerification(t *testing.T) {

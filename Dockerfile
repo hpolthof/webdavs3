@@ -17,17 +17,17 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     -trimpath \
     -tags netgo,osusergo \
     -ldflags="-s -w -buildid=" \
-    -o /out/webdav3s \
-    ./cmd/webdav3s
+    -o /out/webdavs3 \
+    ./cmd/webdavs3
 
-RUN upx --best --lzma /out/webdav3s
+RUN upx --best --lzma /out/webdavs3
 
 FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=builder /out/webdav3s /webdav3s
+COPY --from=builder /out/webdavs3 /webdavs3
 
 EXPOSE 9000 9001
 
-ENTRYPOINT ["/webdav3s"]
+ENTRYPOINT ["/webdavs3"]
 CMD []

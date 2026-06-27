@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hpolthof/webdav3s/internal/s3api"
+	"github.com/hpolthof/webdavs3/internal/s3api"
 )
 
 func TestWriteS3Error_XML(t *testing.T) {

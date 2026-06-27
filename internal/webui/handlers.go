@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	"github.com/hpolthof/webdav3s/internal/object"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/object"
 	"golang.org/x/crypto/bcrypt"
 )
 

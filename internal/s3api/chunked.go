@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hpolthof/webdav3s/internal/auth"
+	"github.com/hpolthof/webdavs3/internal/auth"
 )
 
 // awsChunkedReader decodes an AWS SigV4 streaming (aws-chunked) request body

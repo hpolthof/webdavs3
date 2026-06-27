@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	"github.com/hpolthof/webdav3s/internal/object"
-	"github.com/hpolthof/webdav3s/internal/s3api"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/object"
+	"github.com/hpolthof/webdavs3/internal/s3api"
 )
 
 // stubVerifier always authenticates as a fixed access key.

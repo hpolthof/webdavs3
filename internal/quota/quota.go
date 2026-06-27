@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/meta"
 )
 
 // exceededError signals that the quota would be exceeded.

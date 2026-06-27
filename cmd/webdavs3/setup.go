@@ -17,7 +17,7 @@ func runSetup(cfgPath string) error {
 		os.Exit(1)
 	}
 
-	fmt.Println("webdav3s setup")
+	fmt.Println("webdavs3 setup")
 	fmt.Println("==============")
 	fmt.Println()
 
@@ -98,7 +98,7 @@ log_level: "info"
 	fmt.Printf("\nConfig written to %s\n", cfgPath)
 	fmt.Println()
 	fmt.Println("Next steps:")
-	fmt.Printf("  1. Start the daemon:  webdav3s %s\n", cfgPath)
+	fmt.Printf("  1. Start the daemon:  webdavs3 %s\n", cfgPath)
 	fmt.Printf("  2. Open the admin UI: http://localhost:9001/admin/\n")
 	fmt.Println("  3. Add a WebDAV location, then create S3 users.")
 	return nil

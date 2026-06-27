@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/meta"
 )
 
 func openBucketDB(t *testing.T) meta.BucketDB {

@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	wdv "github.com/hpolthof/webdav3s/internal/webdav"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
 // ErrObjectNotFound is returned when a requested object does not exist.
@@ -241,7 +241,6 @@ func (s *objectService) putChunked(ctx context.Context, bucketName, key, content
 	}
 	return obj, nil
 }
-
 
 // Get returns the Object metadata and a streaming reader from WebDAV.
 // If the object is chunked (len(obj.Chunks) > 0), the chunks are streamed

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	wdv "github.com/hpolthof/webdav3s/internal/webdav"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
 // bucketNameRE enforces S3 bucket naming: 3-63 lowercase/digit/hyphen,
@@ -25,9 +25,9 @@ type Service interface {
 }
 
 type service struct {
-	structure     meta.StructureDB
-	stats         meta.StatsDB
-	wdc           wdv.Client
+	structure      meta.StructureDB
+	stats          meta.StatsDB
+	wdc            wdv.Client
 	flushStructure func()
 }
 

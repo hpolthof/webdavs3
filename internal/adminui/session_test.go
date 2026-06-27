@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hpolthof/webdav3s/internal/adminui"
+	"github.com/hpolthof/webdavs3/internal/adminui"
 )
 
 func TestSession_LoginLogout(t *testing.T) {

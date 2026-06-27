@@ -1,11 +1,11 @@
-# webdav3s
+# webdavs3
 
 An S3-compatible storage gateway that uses WebDAV as its backend. Expose any WebDAV server as an S3 endpoint — compatible with `aws-cli`, `rclone`, `s3cmd`, and any other S3 client.
 
 ## How it works
 
-- Clients talk S3 (AWS Signature V4) to webdav3s on port 9000
-- webdav3s stores objects on WebDAV as SHA-256-hashed blobs under `/_data/`
+- Clients talk S3 (AWS Signature V4) to webdavs3 on port 9000
+- webdavs3 stores objects on WebDAV as SHA-256-hashed blobs under `/_data/`
 - Large objects are automatically chunked into parts (configurable threshold) and stored under `/_parts/` with a manifest in the bucket metadata
 - Metadata (users, buckets, objects) lives in SQLite files stored on the WebDAV backend itself, so a fresh daemon can recover by syncing
 - A browser-based admin UI runs on port 9001 for managing WebDAV locations, users, and quotas
@@ -18,7 +18,7 @@ An S3-compatible storage gateway that uses WebDAV as its backend. Expose any Web
 ## Build
 
 ```bash
-go build -o bin/webdav3s ./cmd/webdav3s
+go build -o bin/webdavs3 ./cmd/webdavs3
 # or
 make build
 ```
@@ -41,7 +41,7 @@ admin_password_hash: "$2a$12$..."   # bcrypt hash of your admin password
 encryption_key: "base64-encoded-32-byte-key=="
 
 # Local directory for SQLite cache and daemon.id
-local_cache_dir: "/var/cache/webdav3s"
+local_cache_dir: "/var/cache/webdavs3"
 
 # S3 region reported to clients
 region: "us-east-1"
@@ -64,7 +64,7 @@ log_format: "json"
 log_level: "info"
 ```
 
-The `webdav3s setup` command generates both values automatically. If you need to hash a password manually:
+The `webdavs3 setup` command generates both values automatically. If you need to hash a password manually:
 
 ```bash
 # htpasswd (Apache utils)
@@ -79,9 +79,9 @@ openssl rand -base64 32
 Run the setup wizard to create `config.yaml` (prompts for admin password, generates encryption key):
 
 ```bash
-./bin/webdav3s setup
+./bin/webdavs3 setup
 # or specify a path:
-./bin/webdav3s setup /etc/webdav3s/config.yaml
+./bin/webdavs3 setup /etc/webdavs3/config.yaml
 ```
 
 The wizard writes a ready-to-use `config.yaml` with a bcrypt-hashed admin password and a randomly generated AES-256 encryption key. No external tools needed.
@@ -89,9 +89,9 @@ The wizard writes a ready-to-use `config.yaml` with a bcrypt-hashed admin passwo
 ## Run
 
 ```bash
-./bin/webdav3s config.yaml
+./bin/webdavs3 config.yaml
 # or with defaults (looks for config.yaml in current directory)
-./bin/webdav3s
+./bin/webdavs3
 ```
 
 On first start, the daemon generates a `daemon.id` file in `local_cache_dir` and creates the local SQLite databases. Add at least one WebDAV location via the admin UI before creating buckets.
@@ -123,7 +123,7 @@ locations:
         owner: backup-bot
 ```
 
-Provisioning is a one-time bootstrap only. On startup, `webdav3s` applies the file exactly once for a new instance; if any users, locations, buckets, or the local `provisioned.flag` marker already exist, startup fails instead of reapplying the file.
+Provisioning is a one-time bootstrap only. On startup, `webdavs3` applies the file exactly once for a new instance; if any users, locations, buckets, or the local `provisioned.flag` marker already exist, startup fails instead of reapplying the file.
 
 After the first successful bootstrap, remove `WEBDAV3S_PROVISION_FILE` or leave the mounted file in place only if you expect startup to fail on reused state.
 
@@ -168,7 +168,7 @@ endpoint_url = http://localhost:9000
 
 ```ini
 # ~/.config/rclone/rclone.conf
-[webdav3s]
+[webdavs3]
 type = s3
 provider = Other
 access_key_id = YOUR_ACCESS_KEY
@@ -178,8 +178,8 @@ region = us-east-1
 ```
 
 ```bash
-rclone ls webdav3s:mybucket
-rclone copy localfile.txt webdav3s:mybucket/localfile.txt
+rclone ls webdavs3:mybucket
+rclone copy localfile.txt webdavs3:mybucket/localfile.txt
 ```
 
 ### s3cmd
@@ -264,8 +264,8 @@ Example `docker-compose.yml`:
 
 ```yaml
 services:
-  webdav3s:
-    image: webdav3s:latest
+  webdavs3:
+    image: webdavs3:latest
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -277,11 +277,11 @@ services:
       WEBDAV3S_PROVISION_FILE: "/run/config/provision.yaml"
       WEBDAV3S_LOG_FORMAT: "json"
     volumes:
-      - webdav3s-cache:/data/cache
+      - webdavs3-cache:/data/cache
       - ./provision.yaml:/run/config/provision.yaml:ro
 
 volumes:
-  webdav3s-cache:
+  webdavs3-cache:
 ```
 
 For Docker, Coolify, and similar platforms, mount `provision.yaml` as a read-only file inside the container and point `WEBDAV3S_PROVISION_FILE` at that path. Use this only for first boot of a fresh `local_cache_dir`; once the instance has been provisioned, the next startup with the same cache directory will fail if the file is still enforced against existing state.
@@ -291,7 +291,7 @@ The runtime image is `scratch`, so there is no shell or package manager in the f
 Example build command:
 
 ```bash
-docker build -t webdav3s:latest .
+docker build -t webdavs3:latest .
 ```
 
 If you publish through GitHub Actions, the image name in GHCR will be `ghcr.io/hpolthof/webdavs3`. For example:
@@ -344,7 +344,7 @@ The script runs 15 operations (create bucket, put objects, list, get, delete) an
 Export the current locations, users, and buckets as provisioning YAML:
 
 ```bash
-./bin/webdav3s provision dump config.yaml > provision.yaml
+./bin/webdavs3 provision dump config.yaml > provision.yaml
 ```
 
 The dump contains plaintext WebDAV passwords, S3 secret keys, and web UI passwords. Treat `provision.yaml` like a credential backup and store or transmit it accordingly.

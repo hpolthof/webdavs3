@@ -7,6 +7,6 @@ bin
 data
 docs
 scripts
-webdav3s.exe
+webdavs3.exe
 *.exe
 *.log

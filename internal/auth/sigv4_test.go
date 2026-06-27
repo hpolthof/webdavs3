@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/auth"
+	"github.com/hpolthof/webdavs3/internal/auth"
 )
 
 // Test vectors from AWS Signature V4 Test Suite

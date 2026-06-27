@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	ourwebdav "github.com/hpolthof/webdavs3/internal/webdav"
 	"golang.org/x/net/webdav"
-	ourwebdav "github.com/hpolthof/webdav3s/internal/webdav"
 )
 
 func newTestServer(t *testing.T) *httptest.Server {

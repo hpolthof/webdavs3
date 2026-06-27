@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/meta"
 	"gopkg.in/yaml.v3"
 )
 

@@ -1,10 +1,10 @@
 .PHONY: build test run
 
 build:
-	go build -o bin/webdav3s.exe ./cmd/webdav3s
+	go build -o bin/webdavs3.exe ./cmd/webdavs3
 
 test:
 	go test ./... -v -race -count=1
 
 run: build
-	./bin/webdav3s.exe
+	./bin/webdavs3.exe

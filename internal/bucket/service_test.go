@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/bucket"
-	"github.com/hpolthof/webdav3s/internal/meta"
-	wdv "github.com/hpolthof/webdav3s/internal/webdav"
+	"github.com/hpolthof/webdavs3/internal/bucket"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
 // minimal in-memory WebDAV mock (same pattern as sync tests)
@@ -30,7 +30,7 @@ func (m *mockWDV) Download(_ context.Context, p string) (io.ReadCloser, error) {
 	}
 	return io.NopCloser(bytes.NewReader(d)), nil
 }
-func (m *mockWDV) Delete(_ context.Context, p string) error  { delete(m.files, p); return nil }
+func (m *mockWDV) Delete(_ context.Context, p string) error   { delete(m.files, p); return nil }
 func (m *mockWDV) MkdirAll(_ context.Context, _ string) error { return nil }
 func (m *mockWDV) Exists(_ context.Context, p string) (bool, error) {
 	_, ok := m.files[p]
@@ -61,7 +61,7 @@ func (m *mockWDV) UploadFromFile(_ context.Context, p, src string) error {
 	return nil
 }
 func (m *mockWDV) ReadDir(_ context.Context, _ string) ([]string, error) { return nil, nil }
-func (m *mockWDV) Ping(_ context.Context) error { return nil }
+func (m *mockWDV) Ping(_ context.Context) error                          { return nil }
 func (m *mockWDV) Stat(_ context.Context, _ string) (os.FileInfo, error) { return nil, nil }
 
 var _ wdv.Client = (*mockWDV)(nil)

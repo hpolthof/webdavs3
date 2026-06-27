@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hpolthof/webdav3s/internal/auth"
-	"github.com/hpolthof/webdav3s/internal/bucket"
-	"github.com/hpolthof/webdav3s/internal/meta"
-	"github.com/hpolthof/webdav3s/internal/object"
-	"github.com/hpolthof/webdav3s/internal/quota"
+	"github.com/hpolthof/webdavs3/internal/auth"
+	"github.com/hpolthof/webdavs3/internal/bucket"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/object"
+	"github.com/hpolthof/webdavs3/internal/quota"
 )
 
 // S3Deps groups all dependencies required by the S3 API layer.

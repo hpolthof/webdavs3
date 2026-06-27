@@ -23,16 +23,16 @@ type BucketEntry struct {
 
 // ListBucketResult is the XML response for ListObjectsV2.
 type ListBucketResult struct {
-	XMLName               xml.Name      `xml:"ListBucketResult"`
-	Name                  string        `xml:"Name"`
-	Prefix                string        `xml:"Prefix"`
-	Delimiter             string        `xml:"Delimiter,omitempty"`
-	MaxKeys               int           `xml:"MaxKeys"`
-	KeyCount              int           `xml:"KeyCount"`
-	IsTruncated           bool          `xml:"IsTruncated"`
-	NextContinuationToken string        `xml:"NextContinuationToken,omitempty"`
-	ContinuationToken     string        `xml:"ContinuationToken,omitempty"`
-	Contents              []ObjectEntry `xml:"Contents"`
+	XMLName               xml.Name       `xml:"ListBucketResult"`
+	Name                  string         `xml:"Name"`
+	Prefix                string         `xml:"Prefix"`
+	Delimiter             string         `xml:"Delimiter,omitempty"`
+	MaxKeys               int            `xml:"MaxKeys"`
+	KeyCount              int            `xml:"KeyCount"`
+	IsTruncated           bool           `xml:"IsTruncated"`
+	NextContinuationToken string         `xml:"NextContinuationToken,omitempty"`
+	ContinuationToken     string         `xml:"ContinuationToken,omitempty"`
+	Contents              []ObjectEntry  `xml:"Contents"`
 	CommonPrefixes        []CommonPrefix `xml:"CommonPrefixes"`
 }
 

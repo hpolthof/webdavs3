@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	wdv "github.com/hpolthof/webdav3s/internal/webdav"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 	"golang.org/x/crypto/bcrypt"
 )
 

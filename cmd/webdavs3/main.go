@@ -15,17 +15,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/adminui"
-	"github.com/hpolthof/webdav3s/internal/auth"
-	"github.com/hpolthof/webdav3s/internal/bucket"
-	"github.com/hpolthof/webdav3s/internal/meta"
-	"github.com/hpolthof/webdav3s/internal/object"
-	"github.com/hpolthof/webdav3s/internal/provisioning"
-	"github.com/hpolthof/webdav3s/internal/quota"
-	"github.com/hpolthof/webdav3s/internal/s3api"
-	msync "github.com/hpolthof/webdav3s/internal/sync"
-	"github.com/hpolthof/webdav3s/internal/webdav"
-	"github.com/hpolthof/webdav3s/internal/webui"
+	"github.com/hpolthof/webdavs3/internal/adminui"
+	"github.com/hpolthof/webdavs3/internal/auth"
+	"github.com/hpolthof/webdavs3/internal/bucket"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/object"
+	"github.com/hpolthof/webdavs3/internal/provisioning"
+	"github.com/hpolthof/webdavs3/internal/quota"
+	"github.com/hpolthof/webdavs3/internal/s3api"
+	msync "github.com/hpolthof/webdavs3/internal/sync"
+	"github.com/hpolthof/webdavs3/internal/webdav"
+	"github.com/hpolthof/webdavs3/internal/webui"
 )
 
 func main() {
@@ -73,10 +73,10 @@ func main() {
 			}
 		case "-h", "--help", "help":
 			fmt.Println("Usage:")
-			fmt.Println("  webdav3s [config.yaml]          run the daemon")
-			fmt.Println("  webdav3s setup [config.yaml]    interactive first-run setup")
-			fmt.Println("  webdav3s gc [--force] [config.yaml]   remove orphaned files from all WebDAV locations")
-			fmt.Println("  webdav3s provision dump [config.yaml] export current provisioning state as YAML")
+			fmt.Println("  webdavs3 [config.yaml]          run the daemon")
+			fmt.Println("  webdavs3 setup [config.yaml]    interactive first-run setup")
+			fmt.Println("  webdavs3 gc [--force] [config.yaml]   remove orphaned files from all WebDAV locations")
+			fmt.Println("  webdavs3 provision dump [config.yaml] export current provisioning state as YAML")
 			return
 		default:
 			cfgPath = os.Args[1]

@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	"github.com/hpolthof/webdav3s/internal/object"
-	wdv "github.com/hpolthof/webdav3s/internal/webdav"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/object"
+	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
 // mockWDV — minimal in-memory WebDAV.

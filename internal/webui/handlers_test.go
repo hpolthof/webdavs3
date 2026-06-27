@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hpolthof/webdav3s/internal/meta"
-	"github.com/hpolthof/webdav3s/internal/object"
-	"github.com/hpolthof/webdav3s/internal/webui"
+	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/object"
+	"github.com/hpolthof/webdavs3/internal/webui"
 	"golang.org/x/crypto/bcrypt"
 )
 
