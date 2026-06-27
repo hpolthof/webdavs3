@@ -210,7 +210,7 @@ func runDaemon(ctx context.Context, cfgPath string) error {
 		}
 	}
 
-	bucketSvc := bucket.NewWithFlush(structDB, statsDB, wdc, flushStructure)
+	bucketSvc := bucket.NewWithFlushAndCacheDir(structDB, statsDB, wdc, flushStructure, cfg.LocalCacheDir)
 	multipartSvc := object.NewMultipartService(wdc, bucketCache, statsDB, structDB, cfg.LocalCacheDir)
 	objectSvc := object.New(
 		wdc, bucketCache, statsDB, structDB, cfg.LocalCacheDir,

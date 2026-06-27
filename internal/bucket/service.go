@@ -29,6 +29,7 @@ type service struct {
 	stats          meta.StatsDB
 	wdc            wdv.Client
 	flushStructure func()
+	cacheDir       string
 }
 
 // New creates a bucket Service.
@@ -39,7 +40,12 @@ func New(structure meta.StructureDB, stats meta.StatsDB, wdc wdv.Client) Service
 // NewWithFlush creates a bucket Service with an optional callback that is
 // invoked after the bucket list in StructureDB changes.
 func NewWithFlush(structure meta.StructureDB, stats meta.StatsDB, wdc wdv.Client, flushStructure func()) Service {
-	return &service{structure: structure, stats: stats, wdc: wdc, flushStructure: flushStructure}
+	return NewWithFlushAndCacheDir(structure, stats, wdc, flushStructure, "")
+}
+
+// NewWithFlushAndCacheDir creates a bucket Service that writes temp files to cacheDir.
+func NewWithFlushAndCacheDir(structure meta.StructureDB, stats meta.StatsDB, wdc wdv.Client, flushStructure func(), cacheDir string) Service {
+	return &service{structure: structure, stats: stats, wdc: wdc, flushStructure: flushStructure, cacheDir: cacheDir}
 }
 
 // validateBucketName enforces DNS-compatible S3 bucket naming rules.
@@ -85,7 +91,7 @@ func (s *service) CreateBucket(ctx context.Context, name, ownerUserID, locationI
 	}
 
 	// Create an empty bucket DB in a temp file, then upload it.
-	tmp, err := os.CreateTemp("", "bucket-*.db")
+	tmp, err := os.CreateTemp(s.cacheDir, "bucket-*.db")
 	if err != nil {
 		return fmt.Errorf("create temp bucket db: %w", err)
 	}

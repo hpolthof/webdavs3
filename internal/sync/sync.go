@@ -138,7 +138,7 @@ func (e *engine) SyncFromWebDAV(ctx context.Context, locationID string) error {
 	}
 
 	// Download structure.db to a local temp file.
-	tmp, err := os.CreateTemp("", "structure-sync-*.db")
+	tmp, err := os.CreateTemp(e.localCacheDir, "structure-sync-*.db")
 	if err != nil {
 		return fmt.Errorf("create temp: %w", err)
 	}
@@ -195,7 +195,7 @@ func (e *engine) FindRemoteLocationID(ctx context.Context, locationID string) (s
 
 	locClient := e.newLocationClient(loc.URL, loc.Username, password)
 
-	tmp, err := os.CreateTemp("", "structure-probe-*.db")
+	tmp, err := os.CreateTemp(e.localCacheDir, "structure-probe-*.db")
 	if err != nil {
 		return "", false, fmt.Errorf("create temp: %w", err)
 	}
@@ -373,7 +373,7 @@ func (e *engine) syncStatsDBs(ctx context.Context, locClient wdv.Client, locatio
 			continue
 		}
 
-		tmp, err := os.CreateTemp("", "stats-sync-*.db")
+		tmp, err := os.CreateTemp(e.localCacheDir, "stats-sync-*.db")
 		if err != nil {
 			return fmt.Errorf("create temp stats sync: %w", err)
 		}
@@ -403,7 +403,7 @@ func (e *engine) FlushStructure(ctx context.Context) error {
 		return fmt.Errorf("mkdirall %s: %w", metaDir, err)
 	}
 
-	tmp, err := os.CreateTemp("", "structure-flush-*.db")
+	tmp, err := os.CreateTemp(e.localCacheDir, "structure-flush-*.db")
 	if err != nil {
 		return fmt.Errorf("create temp: %w", err)
 	}
