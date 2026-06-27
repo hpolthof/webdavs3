@@ -30,6 +30,8 @@ func LoadConfig(path string) (*Config, error) {
 	cfg := &Config{
 		S3Listen:          ":9000",
 		AdminListen:       ":9001",
+		AdminUsername:     "admin",
+		AdminPasswordHash: "$2a$10$ZZUgrqwRYiIDrxpxFcqS5uRBB3bRKNRKLL5kwRHDyBQh8x.WiHyGa", // admin:admin — dev default
 		BucketCacheSize:   50,
 		SyncInterval:      "5m",
 		StatsFlusInterval: "1m",
