@@ -147,7 +147,7 @@ func runDaemon(ctx context.Context, cfgPath string) error {
 	if cfg.LocalCacheDir != "" {
 		statsPath = filepath.Join(cfg.LocalCacheDir, "stats.db")
 	}
-	statsDB, err := meta.OpenStatsDB(statsPath, daemonID)
+	statsDB, err := meta.OpenStatsDBWithCacheDir(statsPath, daemonID, cfg.LocalCacheDir)
 	if err != nil {
 		return fmt.Errorf("open stats.db: %w", err)
 	}

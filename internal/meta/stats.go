@@ -22,15 +22,22 @@ type StatsDB interface {
 type statsDB struct {
 	db       *sql.DB
 	daemonID string
+	cacheDir string
 }
 
 // OpenStatsDB opens the local stats SQLite database for the given daemon.
 func OpenStatsDB(path, daemonID string) (StatsDB, error) {
+	return OpenStatsDBWithCacheDir(path, daemonID, "")
+}
+
+// OpenStatsDBWithCacheDir opens the local stats SQLite database and writes
+// temp files to cacheDir during Flush (instead of the OS default /tmp).
+func OpenStatsDBWithCacheDir(path, daemonID, cacheDir string) (StatsDB, error) {
 	db, err := openSQLite(path)
 	if err != nil {
 		return nil, err
 	}
-	s := &statsDB{db: db, daemonID: daemonID}
+	s := &statsDB{db: db, daemonID: daemonID, cacheDir: cacheDir}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -166,7 +173,7 @@ func (s *statsDB) MergeFromFile(path, sourceFile string, locationIDMap map[strin
 
 // Flush saves the current stats DB to a temp file and uploads it to WebDAV.
 func (s *statsDB) Flush(ctx context.Context, wdc wdv.Client, remotePath string) error {
-	tmp, err := os.CreateTemp("", "stats-*.db")
+	tmp, err := os.CreateTemp(s.cacheDir, "stats-*.db")
 	if err != nil {
 		return fmt.Errorf("create temp for flush: %w", err)
 	}
