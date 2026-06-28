@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
@@ -67,6 +68,7 @@ func (m *multipartService) Create(ctx context.Context, bucketName, key, contentT
 	if err != nil {
 		return "", fmt.Errorf("bucket %q not found: %w", bucketName, err)
 	}
+	slog.Debug("multipart upload create started", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "content_type", contentType)
 	if err := m.checkWriteAllowed(bkt.ID); err != nil {
 		return "", err
 	}
@@ -99,6 +101,7 @@ func (m *multipartService) Create(ctx context.Context, bucketName, key, contentT
 		return "", fmt.Errorf("sync bucket db: %w", err)
 	}
 
+	slog.Debug("multipart upload create completed", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "upload_id", uploadID)
 	return uploadID, nil
 }
 
@@ -141,6 +144,7 @@ func (m *multipartService) UploadPart(ctx context.Context, bucketName, key, uplo
 	if err != nil {
 		return "", fmt.Errorf("bucket %q not found: %w", bucketName, err)
 	}
+	slog.Debug("multipart part upload started", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "upload_id", uploadID, "part_number", partNum, "declared_size", size)
 	if err := m.checkWriteAllowed(bkt.ID); err != nil {
 		return "", err
 	}
@@ -190,6 +194,7 @@ func (m *multipartService) UploadPart(ctx context.Context, bucketName, key, uplo
 		return "", fmt.Errorf("sync bucket db: %w", err)
 	}
 
+	slog.Debug("multipart part upload completed", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "upload_id", uploadID, "part_number", partNum, "size", written, "etag", etag, "path", partPath)
 	return etag, nil
 }
 
@@ -215,6 +220,7 @@ func (m *multipartService) Complete(ctx context.Context, bucketName, key, upload
 	if err != nil {
 		return meta.Object{}, fmt.Errorf("bucket %q not found: %w", bucketName, err)
 	}
+	slog.Debug("multipart upload complete started", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "upload_id", uploadID, "parts", len(parts))
 	if err := m.checkWriteAllowed(bkt.ID); err != nil {
 		return meta.Object{}, err
 	}
@@ -307,6 +313,7 @@ func (m *multipartService) Complete(ctx context.Context, bucketName, key, upload
 
 	_ = m.stats.AddDelta(bkt.WebDAVLocationID, bkt.OwnerUserID, bkt.ID, totalSize, 1)
 
+	slog.Debug("multipart upload complete completed", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "upload_id", uploadID, "object_id", obj.ID, "size", totalSize, "etag", etag, "chunks", len(chunks))
 	return obj, nil
 }
 
@@ -316,6 +323,7 @@ func (m *multipartService) Abort(ctx context.Context, bucketName, uploadID strin
 	if err != nil {
 		return fmt.Errorf("bucket %q not found: %w", bucketName, err)
 	}
+	slog.Debug("multipart upload abort started", "bucket", bucketName, "bucket_id", bkt.ID, "upload_id", uploadID)
 	if err := m.checkWriteAllowed(bkt.ID); err != nil {
 		return err
 	}
@@ -350,6 +358,7 @@ func (m *multipartService) Abort(ctx context.Context, bucketName, uploadID strin
 		}
 		return err
 	}
+	slog.Debug("multipart upload abort completed", "bucket", bucketName, "bucket_id", bkt.ID, "upload_id", uploadID, "parts_deleted", len(parts))
 	return nil
 }
 
@@ -359,12 +368,17 @@ func (m *multipartService) ListUploads(ctx context.Context, bucketName string) (
 	if err != nil {
 		return nil, fmt.Errorf("bucket %q not found: %w", bucketName, err)
 	}
+	slog.Debug("multipart upload list started", "bucket", bucketName, "bucket_id", bkt.ID)
 	bdb, release, err := m.cache.Get(bkt.ID)
 	if err != nil {
 		return nil, fmt.Errorf("open bucket db: %w", err)
 	}
 	defer release()
-	return bdb.ListMultipartUploads()
+	uploads, err := bdb.ListMultipartUploads()
+	if err == nil {
+		slog.Debug("multipart upload list completed", "bucket", bucketName, "bucket_id", bkt.ID, "uploads", len(uploads))
+	}
+	return uploads, err
 }
 
 // ListParts returns all uploaded parts for the given multipart upload.
@@ -373,12 +387,17 @@ func (m *multipartService) ListParts(ctx context.Context, bucketName, uploadID s
 	if err != nil {
 		return nil, fmt.Errorf("bucket %q not found: %w", bucketName, err)
 	}
+	slog.Debug("multipart part list started", "bucket", bucketName, "bucket_id", bkt.ID, "upload_id", uploadID)
 	bdb, release, err := m.cache.Get(bkt.ID)
 	if err != nil {
 		return nil, fmt.Errorf("open bucket db: %w", err)
 	}
 	defer release()
-	return bdb.ListParts(uploadID)
+	parts, err := bdb.ListParts(uploadID)
+	if err == nil {
+		slog.Debug("multipart part list completed", "bucket", bucketName, "bucket_id", bkt.ID, "upload_id", uploadID, "parts", len(parts))
+	}
+	return parts, err
 }
 
 // syncBucketDB saves BucketDB to a temp file and uploads to WebDAV as {baseDir}_meta/{bucketID}.db.

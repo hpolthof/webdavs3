@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -65,6 +66,7 @@ func validateBucketName(name string) error {
 // CreateBucket validates the name, records the bucket in StructureDB, creates
 // the base directory + _meta/ directory on WebDAV, and uploads an empty bucket database.
 func (s *service) CreateBucket(ctx context.Context, name, ownerUserID, locationID string) error {
+	slog.Debug("bucket create started", "bucket", name, "owner_user_id", ownerUserID, "location", locationID)
 	if err := validateBucketName(name); err != nil {
 		return err
 	}
@@ -125,11 +127,13 @@ func (s *service) CreateBucket(ctx context.Context, name, ownerUserID, locationI
 	if s.flushStructure != nil {
 		s.flushStructure()
 	}
+	slog.Debug("bucket create completed", "bucket", name, "bucket_id", bucketID, "owner_user_id", ownerUserID, "location", locationID, "remote_path", remotePath)
 	return nil
 }
 
 // DeleteBucket removes the bucket record and its WebDAV metadata file.
 func (s *service) DeleteBucket(ctx context.Context, name string) error {
+	slog.Debug("bucket delete started", "bucket", name)
 	b, err := s.structure.GetBucket(name)
 	if err != nil {
 		return fmt.Errorf("get bucket %q: %w", name, err)
@@ -151,16 +155,26 @@ func (s *service) DeleteBucket(ctx context.Context, name string) error {
 	if s.flushStructure != nil {
 		s.flushStructure()
 	}
+	slog.Debug("bucket delete completed", "bucket", name, "bucket_id", b.ID, "owner_user_id", b.OwnerUserID, "location", b.WebDAVLocationID, "remote_path", remotePath)
 	return nil
 }
 
 // ListBuckets returns all buckets owned by ownerUserID.
 // If ownerUserID is empty, returns all buckets.
 func (s *service) ListBuckets(ctx context.Context, ownerUserID string) ([]meta.Bucket, error) {
+	slog.Debug("bucket list started", "owner_user_id", ownerUserID)
 	if ownerUserID == "" {
-		return s.structure.ListBuckets()
+		buckets, err := s.structure.ListBuckets()
+		if err == nil {
+			slog.Debug("bucket list completed", "owner_user_id", ownerUserID, "count", len(buckets))
+		}
+		return buckets, err
 	}
-	return s.structure.ListBucketsByUser(ownerUserID)
+	buckets, err := s.structure.ListBucketsByUser(ownerUserID)
+	if err == nil {
+		slog.Debug("bucket list completed", "owner_user_id", ownerUserID, "count", len(buckets))
+	}
+	return buckets, err
 }
 
 // newUUID generates a random UUID v4 using crypto/rand.

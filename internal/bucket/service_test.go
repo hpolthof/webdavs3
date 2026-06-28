@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -171,5 +173,42 @@ func TestBucketService_DuplicateName(t *testing.T) {
 	svc.CreateBucket(ctx, "unique", "u-1", "loc-1")
 	if err := svc.CreateBucket(ctx, "unique", "u-1", "loc-1"); err == nil {
 		t.Fatal("expected error creating duplicate bucket, got nil")
+	}
+}
+
+func TestBucketService_DebugLogsLifecycleActions(t *testing.T) {
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	svc, _, _ := setupService(t)
+	ctx := context.Background()
+
+	if err := svc.CreateBucket(ctx, "log-bucket", "u-1", "loc-1"); err != nil {
+		t.Fatalf("CreateBucket: %v", err)
+	}
+	if _, err := svc.ListBuckets(ctx, "u-1"); err != nil {
+		t.Fatalf("ListBuckets: %v", err)
+	}
+	if err := svc.DeleteBucket(ctx, "log-bucket"); err != nil {
+		t.Fatalf("DeleteBucket: %v", err)
+	}
+
+	got := logs.String()
+	for _, want := range []string{
+		`msg="bucket create started"`,
+		`msg="bucket create completed"`,
+		`msg="bucket list completed"`,
+		`msg="bucket delete started"`,
+		`msg="bucket delete completed"`,
+		`bucket=log-bucket`,
+		`bucket_id=`,
+		`owner_user_id=u-1`,
+		`location=loc-1`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("debug logs missing %q\nlogs:\n%s", want, got)
+		}
 	}
 }

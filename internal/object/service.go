@@ -128,6 +128,7 @@ func (s *objectService) Put(ctx context.Context, bucketName, key, contentType st
 	if err != nil {
 		return meta.Object{}, fmt.Errorf("%w: %s", ErrBucketNotFound, bucketName)
 	}
+	slog.Debug("object put started", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "content_type", contentType, "declared_size", size)
 	if err := s.checkWriteAllowed(bkt.ID); err != nil {
 		return meta.Object{}, err
 	}
@@ -151,7 +152,11 @@ func (s *objectService) Put(ctx context.Context, bucketName, key, contentType st
 
 	// Auto-chunk if size exceeds threshold and multipart service is available.
 	if s.chunkThresholdBytes > 0 && written > s.chunkThresholdBytes && s.mp != nil {
-		return s.putChunked(ctx, bucketName, key, contentType, tmpPath, written)
+		obj, err := s.putChunked(ctx, bucketName, key, contentType, tmpPath, written)
+		if err == nil {
+			slog.Debug("object put completed", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "object_id", obj.ID, "size", obj.SizeBytes, "etag", obj.ETag, "chunks", len(obj.Chunks))
+		}
+		return obj, err
 	}
 
 	loc, err := s.structure.GetLocation(bkt.WebDAVLocationID)
@@ -205,6 +210,7 @@ func (s *objectService) Put(ctx context.Context, bucketName, key, contentType st
 
 	_ = s.stats.AddDelta(bkt.WebDAVLocationID, bkt.OwnerUserID, bkt.ID, written, 1)
 
+	slog.Debug("object put completed", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "object_id", obj.ID, "size", written, "etag", etag, "path", hashPath)
 	return obj, nil
 }
 
@@ -217,6 +223,7 @@ func (s *objectService) checkWriteAllowed(bucketID string) error {
 
 // putChunked splits the temp file into chunks and uploads via MultipartService.
 func (s *objectService) putChunked(ctx context.Context, bucketName, key, contentType, tmpPath string, totalSize int64) (meta.Object, error) {
+	slog.Debug("object put switching to multipart", "bucket", bucketName, "key", key, "content_type", contentType, "size", totalSize, "chunk_size", s.chunkSizeBytes)
 	uploadID, err := s.mp.Create(ctx, bucketName, key, contentType)
 	if err != nil {
 		return meta.Object{}, fmt.Errorf("create multipart upload: %w", err)
@@ -266,13 +273,14 @@ func (s *objectService) putChunked(ctx context.Context, bucketName, key, content
 // If the object is chunked (len(obj.Chunks) > 0), the chunks are streamed
 // sequentially as a single ReadCloser via io.MultiReader.
 func (s *objectService) Get(ctx context.Context, bucketName, key string) (meta.Object, io.ReadCloser, error) {
-	obj, _, err := s.lookupObject(ctx, bucketName, key)
+	slog.Debug("object get started", "bucket", bucketName, "key", key)
+	obj, bkt, err := s.lookupObject(ctx, bucketName, key)
 	if err != nil {
 		return meta.Object{}, nil, err
 	}
 
 	if len(obj.Chunks) > 0 {
-		return s.getChunked(ctx, obj)
+		return s.getChunked(ctx, bucketName, bkt.ID, obj)
 	}
 
 	slog.Debug("downloading object from webdav", "bucket", bucketName, "key", key, "path", obj.HashPath)
@@ -281,12 +289,13 @@ func (s *objectService) Get(ctx context.Context, bucketName, key string) (meta.O
 		slog.Error("download from webdav failed", "bucket", bucketName, "key", key, "path", obj.HashPath, "err", err)
 		return meta.Object{}, nil, fmt.Errorf("download %s: %w", obj.HashPath, err)
 	}
+	slog.Debug("object get completed", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "object_id", obj.ID, "size", obj.SizeBytes, "etag", obj.ETag, "path", obj.HashPath)
 	return obj, rc, nil
 }
 
 // getChunked opens each chunk as a separate WebDAV download and stitches them
 // together into a single ReadCloser via io.MultiReader.
-func (s *objectService) getChunked(ctx context.Context, obj meta.Object) (meta.Object, io.ReadCloser, error) {
+func (s *objectService) getChunked(ctx context.Context, bucketName, bucketID string, obj meta.Object) (meta.Object, io.ReadCloser, error) {
 	closers := make([]io.ReadCloser, 0, len(obj.Chunks))
 	readers := make([]io.Reader, 0, len(obj.Chunks))
 
@@ -306,6 +315,7 @@ func (s *objectService) getChunked(ctx context.Context, obj meta.Object) (meta.O
 		readers = append(readers, rc)
 	}
 
+	slog.Debug("object get completed", "bucket", bucketName, "bucket_id", bucketID, "key", obj.Key, "object_id", obj.ID, "size", obj.SizeBytes, "etag", obj.ETag, "chunks", len(obj.Chunks))
 	return obj, &multiReadCloser{Reader: io.MultiReader(readers...), closers: closers}, nil
 }
 
@@ -330,6 +340,7 @@ func (m *multiReadCloser) Close() error {
 // in any bucket on the same location still references it (dedup guard).
 // For multipart objects, chunk files are deleted directly (paths are unique per upload).
 func (s *objectService) Delete(ctx context.Context, bucketName, key string) error {
+	slog.Debug("object delete started", "bucket", bucketName, "key", key)
 	obj, bkt, err := s.lookupObject(ctx, bucketName, key)
 	if err != nil {
 		return err
@@ -368,6 +379,7 @@ func (s *objectService) Delete(ctx context.Context, bucketName, key string) erro
 		}
 	}
 
+	slog.Debug("object delete completed", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "object_id", obj.ID, "size", obj.SizeBytes, "etag", obj.ETag, "chunks", len(obj.Chunks))
 	return nil
 }
 
@@ -413,7 +425,11 @@ func (s *objectService) maybeDeleteDataFile(ctx context.Context, hashPath string
 
 // Head returns the Object metadata without touching WebDAV.
 func (s *objectService) Head(ctx context.Context, bucketName, key string) (meta.Object, error) {
-	obj, _, err := s.lookupObject(ctx, bucketName, key)
+	slog.Debug("object head started", "bucket", bucketName, "key", key)
+	obj, bkt, err := s.lookupObject(ctx, bucketName, key)
+	if err == nil {
+		slog.Debug("object head completed", "bucket", bucketName, "bucket_id", bkt.ID, "key", key, "object_id", obj.ID, "size", obj.SizeBytes, "etag", obj.ETag, "content_type", obj.ContentType)
+	}
 	return obj, err
 }
 
@@ -423,6 +439,7 @@ func (s *objectService) List(ctx context.Context, bucketName, prefix, delimiter,
 	if err != nil {
 		return ListResult{}, fmt.Errorf("bucket %q not found: %w", bucketName, err)
 	}
+	slog.Debug("object list started", "bucket", bucketName, "bucket_id", bkt.ID, "prefix", prefix, "delimiter", delimiter, "continuation_token_set", continuationToken != "", "max_keys", maxKeys)
 	bdb, release, err := s.cache.Get(bkt.ID)
 	if err != nil {
 		return ListResult{}, fmt.Errorf("open bucket db: %w", err)
@@ -481,6 +498,7 @@ func (s *objectService) List(ctx context.Context, bucketName, prefix, delimiter,
 		result.Objects = objects
 		result.CommonPrefixes = commonPrefixes
 	}
+	slog.Debug("object list completed", "bucket", bucketName, "bucket_id", bkt.ID, "prefix", prefix, "delimiter", delimiter, "objects", len(result.Objects), "common_prefixes", len(result.CommonPrefixes), "truncated", result.IsTruncated)
 	return result, nil
 }
 

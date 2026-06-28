@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -936,5 +937,54 @@ func TestObjectService_DeleteChunked(t *testing.T) {
 	}
 	if _, ok := wdc.files["/_parts/up1/2"]; ok {
 		t.Error("chunk 2 still exists after delete")
+	}
+}
+
+func TestObjectService_DebugLogsObjectActions(t *testing.T) {
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	svc, _, _, _ := setupObjectService(t)
+	ctx := context.Background()
+
+	if _, err := svc.Put(ctx, "test-bucket", "log.txt", "text/plain", 5, strings.NewReader("hello")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	rcObj, rc, err := svc.Get(ctx, "test-bucket", "log.txt")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	_ = rcObj
+	rc.Close()
+	if _, err := svc.Head(ctx, "test-bucket", "log.txt"); err != nil {
+		t.Fatalf("Head: %v", err)
+	}
+	if _, err := svc.List(ctx, "test-bucket", "", "", "", 100); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if err := svc.Delete(ctx, "test-bucket", "log.txt"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	got := logs.String()
+	for _, want := range []string{
+		`msg="object put started"`,
+		`msg="object put completed"`,
+		`msg="object get started"`,
+		`msg="object get completed"`,
+		`msg="object head completed"`,
+		`msg="object list completed"`,
+		`msg="object delete started"`,
+		`msg="object delete completed"`,
+		`bucket=test-bucket`,
+		`bucket_id=bkt-1`,
+		`key=log.txt`,
+		`size=5`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("debug logs missing %q\nlogs:\n%s", want, got)
+		}
 	}
 }
