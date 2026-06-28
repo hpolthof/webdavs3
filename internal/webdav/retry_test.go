@@ -24,14 +24,19 @@ func (m mockFileInfo) Sys() interface{}   { return nil }
 
 // mockClient is a Client stub for retry tests.
 type mockClient struct {
-	uploadErrs []error // errors returned in sequence; last element repeated if exhausted
-	uploadCall int
-	statInfo   os.FileInfo
-	statErr    error
-	statCalls  int
+	uploadErrs  []error // errors returned in sequence; last element repeated if exhausted
+	uploadCall  int
+	uploadPaths []string
+	statInfo    os.FileInfo
+	statErr     error
+	statCalls   int
+	statPaths   []string
+	renameOld   []string
+	renameNew   []string
 }
 
-func (m *mockClient) UploadFromFile(_ context.Context, _, _ string) error {
+func (m *mockClient) UploadFromFile(_ context.Context, path, _ string) error {
+	m.uploadPaths = append(m.uploadPaths, path)
 	idx := m.uploadCall
 	if idx >= len(m.uploadErrs) {
 		idx = len(m.uploadErrs) - 1
@@ -40,8 +45,9 @@ func (m *mockClient) UploadFromFile(_ context.Context, _, _ string) error {
 	return m.uploadErrs[idx]
 }
 
-func (m *mockClient) Stat(_ context.Context, _ string) (os.FileInfo, error) {
+func (m *mockClient) Stat(_ context.Context, path string) (os.FileInfo, error) {
 	m.statCalls++
+	m.statPaths = append(m.statPaths, path)
 	return m.statInfo, m.statErr
 }
 
@@ -56,7 +62,11 @@ func (m *mockClient) MkdirAll(_ context.Context, _ string) error { return nil }
 func (m *mockClient) Exists(_ context.Context, _ string) (bool, error) {
 	return false, nil
 }
-func (m *mockClient) Rename(_ context.Context, _, _ string, _ bool) error { return nil }
+func (m *mockClient) Rename(_ context.Context, oldpath, newpath string, _ bool) error {
+	m.renameOld = append(m.renameOld, oldpath)
+	m.renameNew = append(m.renameNew, newpath)
+	return nil
+}
 func (m *mockClient) DownloadToFile(_ context.Context, _, _ string) error { return nil }
 func (m *mockClient) ReadDir(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
@@ -107,6 +117,38 @@ func TestRetryClient_SuccessFirstAttempt(t *testing.T) {
 	}
 	if len(*slept) != 0 {
 		t.Errorf("no sleep expected on first-attempt success, got %v", *slept)
+	}
+}
+
+func TestRetryClient_MetadataDBUploadUsesTempThenRename(t *testing.T) {
+	src := writeTempFile(t, "hello")
+	fi, _ := os.Stat(src)
+
+	mock := &mockClient{
+		uploadErrs: []error{nil},
+		statInfo:   mockFileInfo{size: fi.Size()},
+	}
+	rc, _ := newRetryClientWithMock(mock, 3)
+
+	finalPath := "/dev/_meta/bucket-id.db"
+	if err := rc.UploadFromFile(context.Background(), finalPath, src); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(mock.uploadPaths) != 1 {
+		t.Fatalf("uploadPaths = %v, want 1 upload", mock.uploadPaths)
+	}
+	tmpPath := mock.uploadPaths[0]
+	if tmpPath == finalPath {
+		t.Fatalf("metadata upload used final path directly: %s", tmpPath)
+	}
+	if len(mock.statPaths) != 1 || mock.statPaths[0] != tmpPath {
+		t.Fatalf("statPaths = %v, want temp path %s", mock.statPaths, tmpPath)
+	}
+	if len(mock.renameOld) != 1 || mock.renameOld[0] != tmpPath {
+		t.Fatalf("renameOld = %v, want %s", mock.renameOld, tmpPath)
+	}
+	if len(mock.renameNew) != 1 || mock.renameNew[0] != finalPath {
+		t.Fatalf("renameNew = %v, want %s", mock.renameNew, finalPath)
 	}
 }
 

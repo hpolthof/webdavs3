@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
+	"strings"
 	"time"
 )
 
@@ -34,6 +36,30 @@ func NewRetryClient(inner Client, retries int, base time.Duration) *RetryClient 
 // UploadFromFile uploads src to path, retrying up to r.retries times on
 // failure or size mismatch, with exponential backoff between attempts.
 func (r *RetryClient) UploadFromFile(ctx context.Context, path string, src string) error {
+	if shouldUploadAtomically(path) {
+		return r.uploadFromFileAtomic(ctx, path, src)
+	}
+	return r.uploadFromFileVerified(ctx, path, path, src)
+}
+
+func (r *RetryClient) uploadFromFileAtomic(ctx context.Context, finalPath string, src string) error {
+	tmpPath := fmt.Sprintf("%s.tmp-%d", finalPath, time.Now().UnixNano())
+	if err := r.uploadFromFileVerified(ctx, tmpPath, finalPath, src); err != nil {
+		_ = r.inner.Delete(ctx, tmpPath)
+		return err
+	}
+	if err := r.inner.Rename(ctx, tmpPath, finalPath, true); err != nil {
+		_ = r.inner.Delete(ctx, tmpPath)
+		return fmt.Errorf("rename uploaded metadata db: %w", err)
+	}
+	return nil
+}
+
+func shouldUploadAtomically(remotePath string) bool {
+	return strings.HasSuffix(remotePath, ".db") && strings.HasSuffix(path.Dir(remotePath), "_meta")
+}
+
+func (r *RetryClient) uploadFromFileVerified(ctx context.Context, uploadPath, logPath string, src string) error {
 	fi, err := os.Stat(src)
 	if err != nil {
 		return fmt.Errorf("stat local file %s: %w", src, err)
@@ -52,21 +78,21 @@ func (r *RetryClient) UploadFromFile(ctx context.Context, path string, src strin
 			r.SleepFn(delay)
 		}
 
-		if err := r.inner.UploadFromFile(ctx, path, src); err != nil {
-			slog.Warn("upload attempt failed", "attempt", attempt+1, "path", path, "err", err)
+		if err := r.inner.UploadFromFile(ctx, uploadPath, src); err != nil {
+			slog.Warn("upload attempt failed", "attempt", attempt+1, "path", logPath, "err", err)
 			lastErr = err
 			continue
 		}
 
-		remoteInfo, err := r.inner.Stat(ctx, path)
+		remoteInfo, err := r.inner.Stat(ctx, uploadPath)
 		if err != nil {
-			slog.Warn("upload verify stat failed", "attempt", attempt+1, "path", path, "err", err)
+			slog.Warn("upload verify stat failed", "attempt", attempt+1, "path", logPath, "err", err)
 			lastErr = fmt.Errorf("stat after upload: %w", err)
 			continue
 		}
 
 		if remoteInfo.Size() != expectedSize {
-			slog.Warn("upload size mismatch", "attempt", attempt+1, "path", path,
+			slog.Warn("upload size mismatch", "attempt", attempt+1, "path", logPath,
 				"expected", expectedSize, "got", remoteInfo.Size())
 			lastErr = fmt.Errorf("upload size mismatch: expected %d got %d", expectedSize, remoteInfo.Size())
 			continue
