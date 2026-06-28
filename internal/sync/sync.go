@@ -408,6 +408,15 @@ func (e *engine) syncBucketDBs(ctx context.Context, locClient wdv.Client, remote
 			slog.Info("bucket metadata repaired from local cache", "bucket", b.ID, "remote_path", remotePath, "local_path", localPath)
 			continue
 		}
+		if _, err := os.Stat(localPath); err == nil {
+			if err := meta.ValidateBucketDBFile(localPath); err != nil {
+				return fmt.Errorf("validate local bucket db %s before webdav replace: %w", b.ID, err)
+			}
+			slog.Debug("keeping healthy local bucket metadata during sync", "bucket", b.ID, "remote_path", remotePath, "local_path", localPath)
+			continue
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("stat local bucket db %s before webdav replace: %w", b.ID, err)
+		}
 		if e.evictBucket != nil {
 			e.evictBucket(b.ID)
 		}

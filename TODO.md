@@ -17,6 +17,9 @@
   - failing `PUT`, `MKCOL`, and `PROPFIND/Stat` calls.
 - A healthy-looking local main DB can still fail during repair export if SQLite
   checkpointing hits a malformed WAL/sidecar state.
+- During bulk uploads, periodic sync can see a valid but stale remote bucket DB
+  while metadata uploads are retrying. That remote DB must not overwrite a
+  healthy local bucket DB.
 
 ## Fixes already implemented
 
@@ -24,6 +27,8 @@
 - Graceful shutdown now flushes `structure.db` and bucket metadata, not just stats.
 - Metadata DB uploads now use temp-upload plus verify plus WebDAV rename instead of direct overwrite of the final `.db` path.
 - Remote repair now falls back to a read-only immutable export if normal bucket DB export fails during checkpoint, and backs up local sidecar files when present.
+- Periodic sync now keeps healthy local bucket metadata instead of replacing it
+  with a stale-but-valid remote DB.
 - These changes reduce the chance of local corruption and stale-size verification failures.
 
 ## Inspect command to add
