@@ -15,12 +15,15 @@
   - `server closed idle connection`
   - `use of closed network connection`
   - failing `PUT`, `MKCOL`, and `PROPFIND/Stat` calls.
+- A healthy-looking local main DB can still fail during repair export if SQLite
+  checkpointing hits a malformed WAL/sidecar state.
 
 ## Fixes already implemented
 
 - Remote bucket DB sync now downloads to a temp file, validates SQLite integrity, and only then replaces the local DB.
 - Graceful shutdown now flushes `structure.db` and bucket metadata, not just stats.
 - Metadata DB uploads now use temp-upload plus verify plus WebDAV rename instead of direct overwrite of the final `.db` path.
+- Remote repair now falls back to a read-only immutable export if normal bucket DB export fails during checkpoint, and backs up local sidecar files when present.
 - These changes reduce the chance of local corruption and stale-size verification failures.
 
 ## Inspect command to add
@@ -114,6 +117,8 @@ When remote metadata is corrupt but local metadata is healthy:
 - [x] Never run GC while metadata integrity is uncertain.
 - [x] Always create a local backup before repair:
   - `bucket-<id>.db.before-repair`
+  - `bucket-<id>.db-wal.before-repair` when present
+  - `bucket-<id>.db-shm.before-repair` when present
 - [x] Object bytes under `/_data/` and `/_parts/` are preserved during inspect and repair.
 - [ ] Cleanup of orphan data should be a separate explicit command after an inspect report has been reviewed.
 

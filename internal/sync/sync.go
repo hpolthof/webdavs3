@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +16,18 @@ import (
 	"github.com/hpolthof/webdavs3/internal/repair"
 	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
+
+var saveBucketDBFile = func(localPath, exportPath string) error {
+	bdb, err := meta.OpenBucketDB(localPath)
+	if err != nil {
+		return fmt.Errorf("open local bucket db: %w", err)
+	}
+	defer bdb.Close()
+	if err := bdb.SaveToFile(exportPath); err != nil {
+		return fmt.Errorf("export local bucket db: %w", err)
+	}
+	return nil
+}
 
 // isNotFound returns true when err represents an HTTP 404 from the WebDAV server.
 func isNotFound(err error) bool {
@@ -420,14 +433,14 @@ func (e *engine) repairRemoteBucketDB(ctx context.Context, locClient wdv.Client,
 	if err := copyFile(backupPath, localPath); err != nil {
 		return fmt.Errorf("backup local bucket db: %w", err)
 	}
-
-	bdb, err := meta.OpenBucketDB(localPath)
-	if err != nil {
-		return fmt.Errorf("open local bucket db: %w", err)
+	for _, sidecar := range []string{localPath + "-wal", localPath + "-shm"} {
+		if err := copyFileIfExists(sidecar+".before-repair", sidecar); err != nil {
+			return fmt.Errorf("backup local bucket sidecar %s: %w", sidecar, err)
+		}
 	}
+
 	export, err := os.CreateTemp(e.localCacheDir, "bucket-repair-*.db")
 	if err != nil {
-		bdb.Close()
 		return fmt.Errorf("create repair export: %w", err)
 	}
 	exportPath := export.Name()
@@ -435,12 +448,8 @@ func (e *engine) repairRemoteBucketDB(ctx context.Context, locClient wdv.Client,
 	os.Remove(exportPath)
 	defer os.Remove(exportPath)
 
-	if err := bdb.SaveToFile(exportPath); err != nil {
-		bdb.Close()
-		return fmt.Errorf("export local bucket db: %w", err)
-	}
-	if err := bdb.Close(); err != nil {
-		return fmt.Errorf("close local bucket db: %w", err)
+	if err := exportBucketDBForRepair(localPath, exportPath); err != nil {
+		return err
 	}
 
 	remotePath := fmt.Sprintf("%s_meta/%s.db", baseDir, bucketID)
@@ -463,6 +472,51 @@ func (e *engine) repairRemoteBucketDB(ctx context.Context, locClient wdv.Client,
 		return fmt.Errorf("validate repaired remote bucket db: %w", err)
 	}
 	return nil
+}
+
+func exportBucketDBForRepair(localPath, exportPath string) error {
+	if err := saveBucketDBFile(localPath, exportPath); err == nil {
+		return nil
+	} else if !isMalformedSQLiteError(err) {
+		return err
+	} else {
+		slog.Warn("normal bucket metadata export failed; trying read-only repair export", "path", localPath, "err", err)
+	}
+	if err := exportSQLiteReadOnly(localPath, exportPath); err != nil {
+		return fmt.Errorf("export local bucket db read-only fallback: %w", err)
+	}
+	return nil
+}
+
+func exportSQLiteReadOnly(localPath, exportPath string) error {
+	abs, err := filepath.Abs(localPath)
+	if err != nil {
+		return err
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(abs)+"?mode=ro&immutable=1")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	var result string
+	if err := db.QueryRow(`PRAGMA integrity_check`).Scan(&result); err != nil {
+		return fmt.Errorf("integrity_check: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("integrity_check: %s", result)
+	}
+
+	_ = os.Remove(exportPath)
+	if _, err := db.Exec(`VACUUM INTO ?`, exportPath); err != nil {
+		return err
+	}
+	return nil
+}
+
+func isMalformedSQLiteError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "database disk image is malformed") || strings.Contains(msg, "SQLITE_CORRUPT")
 }
 
 func (e *engine) syncStatsDBs(ctx context.Context, locClient wdv.Client, locationIDMap map[string]string, baseDir string) error {
@@ -646,4 +700,14 @@ func copyFile(dst, src string) error {
 
 	_, err = io.Copy(out, in)
 	return err
+}
+
+func copyFileIfExists(dst, src string) error {
+	if _, err := os.Stat(src); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return copyFile(dst, src)
 }
