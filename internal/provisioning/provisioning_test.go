@@ -326,7 +326,10 @@ func (f *fakeWebDAVClient) DownloadToFile(context.Context, string, string) error
 }
 func (f *fakeWebDAVClient) UploadFromFile(context.Context, string, string) error { return nil }
 func (f *fakeWebDAVClient) ReadDir(context.Context, string) ([]string, error)    { return nil, nil }
-func (f *fakeWebDAVClient) Ping(context.Context) error                           { return nil }
+func (f *fakeWebDAVClient) ReadDirInfo(context.Context, string) ([]os.FileInfo, error) {
+	return nil, nil
+}
+func (f *fakeWebDAVClient) Ping(context.Context) error { return nil }
 func (f *fakeWebDAVClient) Stat(context.Context, string) (os.FileInfo, error) {
 	return nil, os.ErrNotExist
 }

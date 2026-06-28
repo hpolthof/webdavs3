@@ -143,6 +143,11 @@ func (r *RetryClient) ReadDir(ctx context.Context, path string) ([]string, error
 	return r.inner.ReadDir(ctx, path)
 }
 
+// ReadDirInfo delegates to inner.
+func (r *RetryClient) ReadDirInfo(ctx context.Context, path string) ([]os.FileInfo, error) {
+	return r.inner.ReadDirInfo(ctx, path)
+}
+
 // Ping delegates to inner.
 func (r *RetryClient) Ping(ctx context.Context) error {
 	return r.inner.Ping(ctx)

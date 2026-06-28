@@ -85,8 +85,9 @@ func (m *mockWDV) ReadDir(_ context.Context, dir string) ([]string, error) {
 	}
 	return names, nil
 }
-func (m *mockWDV) Ping(_ context.Context) error                          { return nil }
-func (m *mockWDV) Stat(_ context.Context, _ string) (os.FileInfo, error) { return nil, nil }
+func (m *mockWDV) ReadDirInfo(_ context.Context, _ string) ([]os.FileInfo, error) { return nil, nil }
+func (m *mockWDV) Ping(_ context.Context) error                                   { return nil }
+func (m *mockWDV) Stat(_ context.Context, _ string) (os.FileInfo, error)          { return nil, nil }
 
 var _ wdv.Client = (*mockWDV)(nil)
 
@@ -403,7 +404,7 @@ func TestEngine_SyncFromWebDAV_RemapSameLocationAndDownloadBucketDB(t *testing.T
 	}
 }
 
-func TestEngine_SyncFromWebDAV_InvalidRemoteBucketDBPreservesLocal(t *testing.T) {
+func TestEngine_SyncFromWebDAV_InvalidRemoteBucketDBRepairsFromLocal(t *testing.T) {
 	bucketID := "bucket-corrupt"
 
 	srcDB, _ := meta.OpenStructureDB(":memory:")
@@ -445,8 +446,8 @@ func TestEngine_SyncFromWebDAV_InvalidRemoteBucketDBPreservesLocal(t *testing.T)
 	defer statsDB.Close()
 
 	eng := msync.NewWithClientFactoryAndCacheDir(wdc, localDB, statsDB, "daemon-corrupt", cacheDir, func(_, _, _ string) wdv.Client { return wdc })
-	if err := eng.SyncFromWebDAV(context.Background(), "loc-local"); err == nil {
-		t.Fatal("SyncFromWebDAV succeeded with invalid remote bucket db")
+	if err := eng.SyncFromWebDAV(context.Background(), "loc-local"); err != nil {
+		t.Fatalf("SyncFromWebDAV should repair invalid remote bucket db from local: %v", err)
 	}
 
 	keptDB, err := meta.OpenBucketDB(localBucketPath)
@@ -456,6 +457,22 @@ func TestEngine_SyncFromWebDAV_InvalidRemoteBucketDBPreservesLocal(t *testing.T)
 	defer keptDB.Close()
 	if _, err := keptDB.GetObject("local.txt"); err != nil {
 		t.Fatalf("local object metadata was not preserved: %v", err)
+	}
+
+	remotePath := filepath.Join(t.TempDir(), "remote-repaired.db")
+	if err := os.WriteFile(remotePath, wdc.files["/_meta/"+bucketID+".db"], 0600); err != nil {
+		t.Fatalf("write repaired remote db: %v", err)
+	}
+	if err := meta.ValidateBucketDBFile(remotePath); err != nil {
+		t.Fatalf("remote bucket db was not repaired: %v", err)
+	}
+	remoteDB, err := meta.OpenBucketDB(remotePath)
+	if err != nil {
+		t.Fatalf("open repaired remote bucket db: %v", err)
+	}
+	defer remoteDB.Close()
+	if _, err := remoteDB.GetObject("local.txt"); err != nil {
+		t.Fatalf("repaired remote metadata missing local object: %v", err)
 	}
 }
 

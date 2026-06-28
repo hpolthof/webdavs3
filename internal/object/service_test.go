@@ -3,6 +3,7 @@ package object_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/hpolthof/webdavs3/internal/meta"
 	"github.com/hpolthof/webdavs3/internal/object"
+	"github.com/hpolthof/webdavs3/internal/repair"
 	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
@@ -95,9 +97,29 @@ func (m *mockWDV) ReadDir(_ context.Context, path string) ([]string, error) {
 	}
 	return names, nil
 }
+func (m *mockWDV) ReadDirInfo(_ context.Context, path string) ([]os.FileInfo, error) {
+	names, err := m.ReadDir(context.Background(), path)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]os.FileInfo, 0, len(names))
+	for _, name := range names {
+		infos = append(infos, mockFileInfo{name: name})
+	}
+	return infos, nil
+}
 func (m *mockWDV) Stat(_ context.Context, _ string) (os.FileInfo, error) { return nil, nil }
 
 var _ wdv.Client = (*mockWDV)(nil)
+
+type mockFileInfo struct{ name string }
+
+func (m mockFileInfo) Name() string       { return m.name }
+func (m mockFileInfo) Size() int64        { return 0 }
+func (m mockFileInfo) Mode() os.FileMode  { return 0 }
+func (m mockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m mockFileInfo) IsDir() bool        { return false }
+func (m mockFileInfo) Sys() any           { return nil }
 
 func TestMockWDV_DeleteDirectory(t *testing.T) {
 	wdc := newMockWDV()
@@ -184,6 +206,39 @@ func TestObjectService_PutGet(t *testing.T) {
 	}
 	if gotObj.Key != "hello.txt" {
 		t.Errorf("Get key: got %q want hello.txt", gotObj.Key)
+	}
+}
+
+func TestObjectService_PutBlockedWhenBucketRepairing(t *testing.T) {
+	structDB, _ := meta.OpenStructureDB(":memory:")
+	statsDB, _ := meta.OpenStatsDB(":memory:", "repairing")
+	defer structDB.Close()
+	defer statsDB.Close()
+	structDB.AddLocation(meta.Location{
+		ID: "loc-1", URL: "http://dav", Username: "u", PasswordEnc: "e",
+		DisplayName: "L", QuotaBytes: 1 << 30, CreatedAt: time.Now(),
+	})
+	structDB.AddBucket(meta.Bucket{
+		ID: "bkt-1", Name: "test-bucket", OwnerUserID: "u-1",
+		WebDAVLocationID: "loc-1", CreatedAt: time.Now(),
+	})
+
+	wdc := newMockWDV()
+	cache := meta.NewLRUCache(4, func(id string) (meta.BucketDB, error) {
+		return meta.OpenBucketDB(":memory:")
+	})
+	repairMgr := repair.NewManager()
+	repairMgr.MarkRepairing("bkt-1", "remote metadata corrupt")
+	svc := object.NewWithRepair(wdc, cache, statsDB, structDB, t.TempDir(), nil, 0, 0, repairMgr)
+
+	_, err := svc.Put(context.Background(), "test-bucket", "blocked.txt", "text/plain", 4, strings.NewReader("data"))
+	if !errors.Is(err, repair.ErrUnavailable) {
+		t.Fatalf("Put err = %v, want ErrUnavailable", err)
+	}
+	for path := range wdc.files {
+		if strings.HasPrefix(path, "/_data/") {
+			t.Fatalf("blocked Put uploaded object data to %s", path)
+		}
 	}
 }
 
@@ -564,6 +619,43 @@ func TestMultipartService_FullFlow(t *testing.T) {
 	}
 	if finalObj.Key != "large.bin" {
 		t.Errorf("final Key: got %q want large.bin", finalObj.Key)
+	}
+}
+
+func TestMultipartService_UploadPartBlockedWhenBucketRepairing(t *testing.T) {
+	wdc := newMockWDV()
+	cache := meta.NewLRUCache(4, func(id string) (meta.BucketDB, error) {
+		return meta.OpenBucketDB(":memory:")
+	})
+	statsDB, _ := meta.OpenStatsDB(":memory:", "mp-repairing")
+	defer statsDB.Close()
+	structDB, _ := meta.OpenStructureDB(":memory:")
+	defer structDB.Close()
+	structDB.AddLocation(meta.Location{
+		ID: "loc-1", URL: "http://dav", Username: "u", PasswordEnc: "e",
+		DisplayName: "L", QuotaBytes: 0, CreatedAt: time.Now(),
+	})
+	structDB.AddBucket(meta.Bucket{
+		ID: "bkt-2", Name: "repair-bucket", OwnerUserID: "u-1",
+		WebDAVLocationID: "loc-1", CreatedAt: time.Now(),
+	})
+
+	repairMgr := repair.NewManager()
+	mp := object.NewMultipartServiceWithRepair(wdc, cache, statsDB, structDB, t.TempDir(), repairMgr)
+	uploadID, err := mp.Create(context.Background(), "repair-bucket", "x.bin", "application/octet-stream")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	repairMgr.MarkRepairing("bkt-2", "remote metadata corrupt")
+	_, err = mp.UploadPart(context.Background(), "repair-bucket", "x.bin", uploadID, 1, 3, strings.NewReader("abc"))
+	if !errors.Is(err, repair.ErrUnavailable) {
+		t.Fatalf("UploadPart err = %v, want ErrUnavailable", err)
+	}
+	for path := range wdc.files {
+		if strings.HasPrefix(path, "/_parts/") {
+			t.Fatalf("blocked UploadPart uploaded part data to %s", path)
+		}
 	}
 }
 

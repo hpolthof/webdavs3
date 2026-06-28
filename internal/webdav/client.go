@@ -22,6 +22,8 @@ type Client interface {
 	UploadFromFile(ctx context.Context, path string, src string) error
 	// ReadDir lists the names of direct children under path.
 	ReadDir(ctx context.Context, path string) ([]string, error)
+	// ReadDirInfo lists direct children under path with their FileInfo (includes size).
+	ReadDirInfo(ctx context.Context, path string) ([]os.FileInfo, error)
 	// Ping checks that the WebDAV server is reachable and credentials work.
 	Ping(ctx context.Context) error
 	// Stat returns metadata for the file at path on the WebDAV server.
@@ -112,6 +114,10 @@ func (cl *ClientImpl) ReadDir(ctx context.Context, path string) ([]string, error
 		names = append(names, fi.Name())
 	}
 	return names, nil
+}
+
+func (cl *ClientImpl) ReadDirInfo(ctx context.Context, path string) ([]os.FileInfo, error) {
+	return cl.c.ReadDir(path)
 }
 
 func (cl *ClientImpl) Ping(ctx context.Context) error {

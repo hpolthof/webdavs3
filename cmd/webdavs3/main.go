@@ -22,6 +22,7 @@ import (
 	"github.com/hpolthof/webdavs3/internal/object"
 	"github.com/hpolthof/webdavs3/internal/provisioning"
 	"github.com/hpolthof/webdavs3/internal/quota"
+	"github.com/hpolthof/webdavs3/internal/repair"
 	"github.com/hpolthof/webdavs3/internal/s3api"
 	msync "github.com/hpolthof/webdavs3/internal/sync"
 	"github.com/hpolthof/webdavs3/internal/webdav"
@@ -39,6 +40,40 @@ func main() {
 			}
 			if err := runSetup(cfgPath); err != nil {
 				fmt.Fprintf(os.Stderr, "setup: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "inspect":
+			jsonOut := false
+			filterBucket := ""
+			var remaining []string
+			for _, a := range os.Args[2:] {
+				if a == "--json" {
+					jsonOut = true
+				} else if strings.HasPrefix(a, "--bucket=") {
+					filterBucket = strings.TrimPrefix(a, "--bucket=")
+				} else if a == "--bucket" {
+					// handled below with peek
+					remaining = append(remaining, a)
+				} else {
+					remaining = append(remaining, a)
+				}
+			}
+			// Handle "--bucket <name>" (two separate args).
+			var filtered []string
+			for i := 0; i < len(remaining); i++ {
+				if remaining[i] == "--bucket" && i+1 < len(remaining) {
+					filterBucket = remaining[i+1]
+					i++
+				} else {
+					filtered = append(filtered, remaining[i])
+				}
+			}
+			if len(filtered) > 0 {
+				cfgPath = filtered[0]
+			}
+			if err := runInspect(cfgPath, jsonOut, filterBucket); err != nil {
+				fmt.Fprintf(os.Stderr, "inspect: %v\n", err)
 				os.Exit(1)
 			}
 			return
@@ -73,10 +108,12 @@ func main() {
 			}
 		case "-h", "--help", "help":
 			fmt.Println("Usage:")
-			fmt.Println("  webdavs3 [config.yaml]          run the daemon")
-			fmt.Println("  webdavs3 setup [config.yaml]    interactive first-run setup")
-			fmt.Println("  webdavs3 gc [--force] [config.yaml]   remove orphaned files from all WebDAV locations")
-			fmt.Println("  webdavs3 provision dump [config.yaml] export current provisioning state as YAML")
+			fmt.Println("  webdavs3 [config.yaml]                          run the daemon")
+			fmt.Println("  webdavs3 setup [config.yaml]                    interactive first-run setup")
+			fmt.Println("  webdavs3 inspect [--json] [--bucket <name>] [config.yaml]")
+			fmt.Println("                                                   inspect metadata integrity and remote storage")
+			fmt.Println("  webdavs3 gc [--force] [config.yaml]             remove orphaned files from all WebDAV locations")
+			fmt.Println("  webdavs3 provision dump [config.yaml]           export current provisioning state as YAML")
 			return
 		default:
 			cfgPath = os.Args[1]
@@ -198,7 +235,8 @@ func runDaemon(ctx context.Context, cfgPath string) error {
 	refreshWebDAV()
 
 	// 9. Init services.
-	syncEngine := msync.NewWithEncryptionAndCacheDirAndBucketEvictor(wdc, structDB, statsDB, daemonID, cfg.LocalCacheDir, cfg.EncryptionKey, adminui.DecryptPassword, bucketCache.Remove)
+	repairMgr := repair.NewManager()
+	syncEngine := msync.NewWithEncryptionAndCacheDirAndBucketEvictorAndRepair(wdc, structDB, statsDB, daemonID, cfg.LocalCacheDir, cfg.EncryptionKey, adminui.DecryptPassword, bucketCache.Remove, repairMgr)
 	verifier := auth.NewVerifier(cfg.Region, "s3")
 	quotaSvc := quota.New(structDB, statsDB)
 
@@ -211,12 +249,13 @@ func runDaemon(ctx context.Context, cfgPath string) error {
 	}
 
 	bucketSvc := bucket.NewWithFlushAndCacheDir(structDB, statsDB, wdc, flushStructure, cfg.LocalCacheDir)
-	multipartSvc := object.NewMultipartService(wdc, bucketCache, statsDB, structDB, cfg.LocalCacheDir)
-	objectSvc := object.New(
+	multipartSvc := object.NewMultipartServiceWithRepair(wdc, bucketCache, statsDB, structDB, cfg.LocalCacheDir, repairMgr)
+	objectSvc := object.NewWithRepair(
 		wdc, bucketCache, statsDB, structDB, cfg.LocalCacheDir,
 		multipartSvc,
 		int64(cfg.ChunkThresholdMB)*1024*1024,
 		int64(cfg.ChunkSizeMB)*1024*1024,
+		repairMgr,
 	)
 
 	if err := provisioning.ApplyStartupProvisioning(ctx, provisioning.ApplyConfig{
@@ -445,6 +484,14 @@ func runGC(cfgPath string, force bool) error {
 		return fmt.Errorf("no locations found in structure.db — run the daemon first to populate it")
 	}
 
+	buckets, err := structDB.ListBuckets()
+	if err != nil {
+		return fmt.Errorf("list buckets: %w", err)
+	}
+	if err := ensureGCLocalMetadataHealthy(cfg, structPath, buckets); err != nil {
+		return err
+	}
+
 	statsDB, err := meta.OpenStatsDB(":memory:", "gc")
 	if err != nil {
 		return fmt.Errorf("open stats: %w", err)
@@ -505,6 +552,22 @@ func runGC(cfgPath string, force bool) error {
 	return nil
 }
 
+func ensureGCLocalMetadataHealthy(cfg *Config, structPath string, buckets []meta.Bucket) error {
+	if cfg.LocalCacheDir == "" {
+		return fmt.Errorf("gc requires local_cache_dir so local metadata can be validated before deleting remote data")
+	}
+	if status := localSQLiteStatus(structPath); status != "ok" {
+		return fmt.Errorf("gc refused: local structure.db is not healthy: %s", status)
+	}
+	for _, bucket := range buckets {
+		dbPath := filepath.Join(cfg.LocalCacheDir, "bucket-"+bucket.ID+".db")
+		if status := localSQLiteStatus(dbPath); status != "ok" {
+			return fmt.Errorf("gc refused: local bucket metadata %s (%s) is not healthy: %s", bucket.Name, bucket.ID, status)
+		}
+	}
+	return nil
+}
+
 func runProvisionDump(cfgPath string) error {
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {
@@ -549,6 +612,9 @@ func (n *noopWebDAV) DownloadToFile(_ context.Context, _, _ string) error {
 }
 func (n *noopWebDAV) UploadFromFile(_ context.Context, _, _ string) error { return nil }
 func (n *noopWebDAV) ReadDir(_ context.Context, _ string) ([]string, error) {
+	return nil, fmt.Errorf("no webdav location configured")
+}
+func (n *noopWebDAV) ReadDirInfo(_ context.Context, _ string) ([]os.FileInfo, error) {
 	return nil, fmt.Errorf("no webdav location configured")
 }
 func (n *noopWebDAV) Ping(_ context.Context) error {

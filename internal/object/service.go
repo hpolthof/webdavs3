@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/repair"
 	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
@@ -57,12 +58,17 @@ type objectService struct {
 	mp                  MultipartService // nil = auto-chunk disabled
 	chunkThresholdBytes int64
 	chunkSizeBytes      int64
+	repair              *repair.Manager
 }
 
 // New creates a new ObjectService.
 // Parameter order: wdc, cache, stats, structure, cacheDir, mp, chunkThresholdBytes, chunkSizeBytes.
 // Pass mp=nil and thresholds=0 to disable auto-chunking.
 func New(wdc wdv.Client, cache *meta.LRUCache, stats meta.StatsDB, structure meta.StructureDB, cacheDir string, mp MultipartService, chunkThresholdBytes, chunkSizeBytes int64) ObjectService {
+	return NewWithRepair(wdc, cache, stats, structure, cacheDir, mp, chunkThresholdBytes, chunkSizeBytes, nil)
+}
+
+func NewWithRepair(wdc wdv.Client, cache *meta.LRUCache, stats meta.StatsDB, structure meta.StructureDB, cacheDir string, mp MultipartService, chunkThresholdBytes, chunkSizeBytes int64, repairMgr *repair.Manager) ObjectService {
 	cleanupStaleTempFiles(cacheDir)
 
 	return &objectService{
@@ -74,6 +80,7 @@ func New(wdc wdv.Client, cache *meta.LRUCache, stats meta.StatsDB, structure met
 		mp:                  mp,
 		chunkThresholdBytes: chunkThresholdBytes,
 		chunkSizeBytes:      chunkSizeBytes,
+		repair:              repairMgr,
 	}
 }
 
@@ -120,6 +127,9 @@ func (s *objectService) Put(ctx context.Context, bucketName, key, contentType st
 	bkt, err := s.structure.GetBucket(bucketName)
 	if err != nil {
 		return meta.Object{}, fmt.Errorf("%w: %s", ErrBucketNotFound, bucketName)
+	}
+	if err := s.checkWriteAllowed(bkt.ID); err != nil {
+		return meta.Object{}, err
 	}
 
 	// Stream to temp file, compute SHA256 + MD5 simultaneously.
@@ -187,12 +197,22 @@ func (s *objectService) Put(ctx context.Context, bucketName, key, contentType st
 	}
 
 	if err := s.syncBucketDB(ctx, bkt.ID, loc.BaseDir, bdb); err != nil {
+		if s.repair != nil {
+			s.repair.MarkRepairing(bkt.ID, err.Error())
+		}
 		return meta.Object{}, fmt.Errorf("sync bucket db: %w", err)
 	}
 
 	_ = s.stats.AddDelta(bkt.WebDAVLocationID, bkt.OwnerUserID, bkt.ID, written, 1)
 
 	return obj, nil
+}
+
+func (s *objectService) checkWriteAllowed(bucketID string) error {
+	if s.repair == nil {
+		return nil
+	}
+	return s.repair.CheckWrite(bucketID)
 }
 
 // putChunked splits the temp file into chunks and uploads via MultipartService.

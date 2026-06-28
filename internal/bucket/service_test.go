@@ -60,9 +60,10 @@ func (m *mockWDV) UploadFromFile(_ context.Context, p, src string) error {
 	m.files[p] = d
 	return nil
 }
-func (m *mockWDV) ReadDir(_ context.Context, _ string) ([]string, error) { return nil, nil }
-func (m *mockWDV) Ping(_ context.Context) error                          { return nil }
-func (m *mockWDV) Stat(_ context.Context, _ string) (os.FileInfo, error) { return nil, nil }
+func (m *mockWDV) ReadDir(_ context.Context, _ string) ([]string, error)          { return nil, nil }
+func (m *mockWDV) ReadDirInfo(_ context.Context, _ string) ([]os.FileInfo, error) { return nil, nil }
+func (m *mockWDV) Ping(_ context.Context) error                                   { return nil }
+func (m *mockWDV) Stat(_ context.Context, _ string) (os.FileInfo, error)          { return nil, nil }
 
 var _ wdv.Client = (*mockWDV)(nil)
 

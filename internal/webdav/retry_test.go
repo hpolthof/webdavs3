@@ -71,6 +71,9 @@ func (m *mockClient) DownloadToFile(_ context.Context, _, _ string) error { retu
 func (m *mockClient) ReadDir(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
+func (m *mockClient) ReadDirInfo(_ context.Context, _ string) ([]os.FileInfo, error) {
+	return nil, nil
+}
 func (m *mockClient) Ping(_ context.Context) error { return nil }
 
 // Compile-time check.

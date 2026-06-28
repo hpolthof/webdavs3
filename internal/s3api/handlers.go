@@ -12,6 +12,7 @@ import (
 	"github.com/hpolthof/webdavs3/internal/meta"
 	"github.com/hpolthof/webdavs3/internal/object"
 	"github.com/hpolthof/webdavs3/internal/quota"
+	"github.com/hpolthof/webdavs3/internal/repair"
 )
 
 type handlers struct {
@@ -192,6 +193,10 @@ func (h *handlers) handlePutObject(w http.ResponseWriter, r *http.Request, bucke
 
 	obj, err := h.deps.Objects.Put(r.Context(), bucketName, key, ct, size, body)
 	if err != nil {
+		if errors.Is(err, repair.ErrUnavailable) {
+			WriteS3Error(w, "ServiceUnavailable", err.Error(), reqID, StatusForCode("ServiceUnavailable"))
+			return
+		}
 		WriteS3Error(w, "InternalError", err.Error(), reqID, http.StatusInternalServerError)
 		return
 	}
@@ -245,6 +250,10 @@ func (h *handlers) handleDeleteObject(w http.ResponseWriter, r *http.Request, bu
 	}
 	reqID := requestIDFromCtx(r.Context())
 	if err := h.deps.Objects.Delete(r.Context(), bucketName, key); err != nil {
+		if errors.Is(err, repair.ErrUnavailable) {
+			WriteS3Error(w, "ServiceUnavailable", err.Error(), reqID, StatusForCode("ServiceUnavailable"))
+			return
+		}
 		WriteS3Error(w, "NoSuchKey", "The specified key does not exist.", reqID, http.StatusNotFound)
 		return
 	}
@@ -263,6 +272,10 @@ func (h *handlers) handleCreateMultipartUpload(w http.ResponseWriter, r *http.Re
 	}
 	uploadID, err := h.deps.Multipart.Create(r.Context(), bucketName, key, ct)
 	if err != nil {
+		if errors.Is(err, repair.ErrUnavailable) {
+			WriteS3Error(w, "ServiceUnavailable", err.Error(), reqID, StatusForCode("ServiceUnavailable"))
+			return
+		}
 		WriteS3Error(w, "InternalError", err.Error(), reqID, http.StatusInternalServerError)
 		return
 	}
@@ -297,6 +310,10 @@ func (h *handlers) handleUploadPart(w http.ResponseWriter, r *http.Request, buck
 
 	etag, err := h.deps.Multipart.UploadPart(r.Context(), bucketName, key, uploadID, partNum, size, body)
 	if err != nil {
+		if errors.Is(err, repair.ErrUnavailable) {
+			WriteS3Error(w, "ServiceUnavailable", err.Error(), reqID, StatusForCode("ServiceUnavailable"))
+			return
+		}
 		if errors.Is(err, object.ErrUploadNotFound) {
 			WriteS3Error(w, "NoSuchUpload", "The specified upload does not exist.", reqID, StatusForCode("NoSuchUpload"))
 			return
@@ -335,6 +352,10 @@ func (h *handlers) handleCompleteMultipartUpload(w http.ResponseWriter, r *http.
 
 	obj, err := h.deps.Multipart.Complete(r.Context(), bucketName, key, uploadID, parts)
 	if err != nil {
+		if errors.Is(err, repair.ErrUnavailable) {
+			WriteS3Error(w, "ServiceUnavailable", err.Error(), reqID, StatusForCode("ServiceUnavailable"))
+			return
+		}
 		if errors.Is(err, object.ErrUploadNotFound) {
 			WriteS3Error(w, "NoSuchUpload", "The specified upload does not exist.", reqID, StatusForCode("NoSuchUpload"))
 			return
@@ -362,6 +383,10 @@ func (h *handlers) handleAbortMultipartUpload(w http.ResponseWriter, r *http.Req
 	reqID := requestIDFromCtx(r.Context())
 	uploadID := r.URL.Query().Get("uploadId")
 	if err := h.deps.Multipart.Abort(r.Context(), bucketName, uploadID); err != nil {
+		if errors.Is(err, repair.ErrUnavailable) {
+			WriteS3Error(w, "ServiceUnavailable", err.Error(), reqID, StatusForCode("ServiceUnavailable"))
+			return
+		}
 		WriteS3Error(w, "NoSuchUpload", err.Error(), reqID, http.StatusNotFound)
 		return
 	}

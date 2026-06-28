@@ -109,6 +109,14 @@ func (r *RefreshableClient) ReadDir(ctx context.Context, path string) ([]string,
 	return c.ReadDir(ctx, path)
 }
 
+func (r *RefreshableClient) ReadDirInfo(ctx context.Context, path string) ([]os.FileInfo, error) {
+	c, err := r.currentClient()
+	if err != nil {
+		return nil, err
+	}
+	return c.ReadDirInfo(ctx, path)
+}
+
 func (r *RefreshableClient) Ping(ctx context.Context) error {
 	c, err := r.currentClient()
 	if err != nil {

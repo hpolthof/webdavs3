@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/repair"
 	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
@@ -47,12 +48,17 @@ type multipartService struct {
 	stats     meta.StatsDB
 	structure meta.StructureDB
 	cacheDir  string
+	repair    *repair.Manager
 }
 
 // NewMultipartService creates a MultipartService.
 // Parameter order: wdc, cache, stats, structure, cacheDir.
 func NewMultipartService(wdc wdv.Client, cache *meta.LRUCache, stats meta.StatsDB, structure meta.StructureDB, cacheDir string) MultipartService {
-	return &multipartService{wdc: wdc, cache: cache, stats: stats, structure: structure, cacheDir: cacheDir}
+	return NewMultipartServiceWithRepair(wdc, cache, stats, structure, cacheDir, nil)
+}
+
+func NewMultipartServiceWithRepair(wdc wdv.Client, cache *meta.LRUCache, stats meta.StatsDB, structure meta.StructureDB, cacheDir string, repairMgr *repair.Manager) MultipartService {
+	return &multipartService{wdc: wdc, cache: cache, stats: stats, structure: structure, cacheDir: cacheDir, repair: repairMgr}
 }
 
 // Create initiates a new multipart upload and records it in BucketDB.
@@ -60,6 +66,9 @@ func (m *multipartService) Create(ctx context.Context, bucketName, key, contentT
 	bkt, err := m.structure.GetBucket(bucketName)
 	if err != nil {
 		return "", fmt.Errorf("bucket %q not found: %w", bucketName, err)
+	}
+	if err := m.checkWriteAllowed(bkt.ID); err != nil {
+		return "", err
 	}
 	bdb, release, err := m.cache.Get(bkt.ID)
 	if err != nil {
@@ -84,6 +93,9 @@ func (m *multipartService) Create(ctx context.Context, bucketName, key, contentT
 	}
 
 	if err := m.syncBucketDB(ctx, bkt.ID, loc.BaseDir, bdb); err != nil {
+		if m.repair != nil {
+			m.repair.MarkRepairing(bkt.ID, err.Error())
+		}
 		return "", fmt.Errorf("sync bucket db: %w", err)
 	}
 
@@ -129,6 +141,9 @@ func (m *multipartService) UploadPart(ctx context.Context, bucketName, key, uplo
 	if err != nil {
 		return "", fmt.Errorf("bucket %q not found: %w", bucketName, err)
 	}
+	if err := m.checkWriteAllowed(bkt.ID); err != nil {
+		return "", err
+	}
 
 	bdb, release, err := m.cache.Get(bkt.ID)
 	if err != nil {
@@ -169,6 +184,9 @@ func (m *multipartService) UploadPart(ctx context.Context, bucketName, key, uplo
 	}
 
 	if err := m.syncBucketDB(ctx, bkt.ID, loc.BaseDir, bdb); err != nil {
+		if m.repair != nil {
+			m.repair.MarkRepairing(bkt.ID, err.Error())
+		}
 		return "", fmt.Errorf("sync bucket db: %w", err)
 	}
 
@@ -196,6 +214,9 @@ func (m *multipartService) Complete(ctx context.Context, bucketName, key, upload
 	bkt, err := m.structure.GetBucket(bucketName)
 	if err != nil {
 		return meta.Object{}, fmt.Errorf("bucket %q not found: %w", bucketName, err)
+	}
+	if err := m.checkWriteAllowed(bkt.ID); err != nil {
+		return meta.Object{}, err
 	}
 	bdb, release, err := m.cache.Get(bkt.ID)
 	if err != nil {
@@ -278,6 +299,9 @@ func (m *multipartService) Complete(ctx context.Context, bucketName, key, upload
 	}
 
 	if err := m.syncBucketDB(ctx, bkt.ID, loc.BaseDir, bdb); err != nil {
+		if m.repair != nil {
+			m.repair.MarkRepairing(bkt.ID, err.Error())
+		}
 		return meta.Object{}, fmt.Errorf("sync bucket db: %w", err)
 	}
 
@@ -291,6 +315,9 @@ func (m *multipartService) Abort(ctx context.Context, bucketName, uploadID strin
 	bkt, err := m.structure.GetBucket(bucketName)
 	if err != nil {
 		return fmt.Errorf("bucket %q not found: %w", bucketName, err)
+	}
+	if err := m.checkWriteAllowed(bkt.ID); err != nil {
+		return err
 	}
 	bdb, release, err := m.cache.Get(bkt.ID)
 	if err != nil {
@@ -317,7 +344,13 @@ func (m *multipartService) Abort(ctx context.Context, bucketName, uploadID strin
 		return fmt.Errorf("get location: %w", err)
 	}
 
-	return m.syncBucketDB(ctx, bkt.ID, loc.BaseDir, bdb)
+	if err := m.syncBucketDB(ctx, bkt.ID, loc.BaseDir, bdb); err != nil {
+		if m.repair != nil {
+			m.repair.MarkRepairing(bkt.ID, err.Error())
+		}
+		return err
+	}
+	return nil
 }
 
 // ListUploads returns all in-progress multipart uploads for the given bucket.
@@ -364,4 +397,11 @@ func (m *multipartService) syncBucketDB(ctx context.Context, bucketID, baseDir s
 		return fmt.Errorf("save bucket db: %w", err)
 	}
 	return m.wdc.UploadFromFile(ctx, fmt.Sprintf("%s_meta/%s.db", baseDir, bucketID), tmpPath)
+}
+
+func (m *multipartService) checkWriteAllowed(bucketID string) error {
+	if m.repair == nil {
+		return nil
+	}
+	return m.repair.CheckWrite(bucketID)
 }

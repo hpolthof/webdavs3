@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/hpolthof/webdavs3/internal/meta"
+	"github.com/hpolthof/webdavs3/internal/repair"
 	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 )
 
@@ -59,6 +61,7 @@ type engine struct {
 	decryptPassword   func(encrypted, key string) (string, error)
 	newLocationClient func(url, username, password string) wdv.Client
 	evictBucket       func(bucketID string)
+	repair            *repair.Manager
 }
 
 // New creates a sync Engine using the provided client for all operations.
@@ -86,6 +89,10 @@ func NewWithEncryptionAndCacheDir(wdc wdv.Client, structure meta.StructureDB, st
 // NewWithEncryptionAndCacheDirAndBucketEvictor creates a sync Engine that can
 // evict open bucket databases before replacing their local files.
 func NewWithEncryptionAndCacheDirAndBucketEvictor(wdc wdv.Client, structure meta.StructureDB, stats meta.StatsDB, daemonID, localCacheDir, encryptionKey string, decryptPassword func(encrypted, key string) (string, error), evictBucket func(bucketID string)) Engine {
+	return NewWithEncryptionAndCacheDirAndBucketEvictorAndRepair(wdc, structure, stats, daemonID, localCacheDir, encryptionKey, decryptPassword, evictBucket, nil)
+}
+
+func NewWithEncryptionAndCacheDirAndBucketEvictorAndRepair(wdc wdv.Client, structure meta.StructureDB, stats meta.StatsDB, daemonID, localCacheDir, encryptionKey string, decryptPassword func(encrypted, key string) (string, error), evictBucket func(bucketID string), repairMgr *repair.Manager) Engine {
 	return &engine{
 		wdc:               wdc,
 		structure:         structure,
@@ -96,6 +103,7 @@ func NewWithEncryptionAndCacheDirAndBucketEvictor(wdc wdv.Client, structure meta
 		decryptPassword:   decryptPassword,
 		newLocationClient: func(url, username, password string) wdv.Client { return wdv.New(url, username, password) },
 		evictBucket:       evictBucket,
+		repair:            repairMgr,
 	}
 }
 
@@ -370,7 +378,22 @@ func (e *engine) syncBucketDBs(ctx context.Context, locClient wdv.Client, remote
 			return fmt.Errorf("download bucket db %s: %w", b.ID, err)
 		}
 		if err := meta.ValidateBucketDBFile(tmpPath); err != nil {
-			return fmt.Errorf("validate bucket db %s from webdav: %w", b.ID, err)
+			if e.repair != nil {
+				e.repair.MarkRepairing(b.ID, err.Error())
+			}
+			slog.Warn("remote bucket metadata corrupt; attempting repair from local", "bucket", b.ID, "remote_path", remotePath, "err", err)
+			if repairErr := e.repairRemoteBucketDB(ctx, locClient, b.ID, baseDir, localPath); repairErr != nil {
+				if e.repair != nil {
+					e.repair.MarkDegraded(b.ID, repairErr.Error())
+				}
+				slog.Warn("bucket metadata repair failed; bucket marked degraded", "bucket", b.ID, "remote_path", remotePath, "local_path", localPath, "err", repairErr)
+				return fmt.Errorf("validate bucket db %s from webdav: %w; repair from local failed: %w", b.ID, err, repairErr)
+			}
+			if e.repair != nil {
+				e.repair.MarkHealthy(b.ID)
+			}
+			slog.Info("bucket metadata repaired from local cache", "bucket", b.ID, "remote_path", remotePath, "local_path", localPath)
+			continue
 		}
 		if e.evictBucket != nil {
 			e.evictBucket(b.ID)
@@ -378,6 +401,66 @@ func (e *engine) syncBucketDBs(ctx context.Context, locClient wdv.Client, remote
 		if err := replaceFile(tmpPath, localPath); err != nil {
 			return fmt.Errorf("replace local bucket db %s: %w", b.ID, err)
 		}
+	}
+	return nil
+}
+
+func (e *engine) repairRemoteBucketDB(ctx context.Context, locClient wdv.Client, bucketID, baseDir, localPath string) error {
+	if e.localCacheDir == "" {
+		return fmt.Errorf("local_cache_dir is required")
+	}
+	if e.evictBucket != nil {
+		e.evictBucket(bucketID)
+	}
+	if err := meta.ValidateBucketDBFile(localPath); err != nil {
+		return fmt.Errorf("validate local bucket db: %w", err)
+	}
+
+	backupPath := localPath + ".before-repair"
+	if err := copyFile(backupPath, localPath); err != nil {
+		return fmt.Errorf("backup local bucket db: %w", err)
+	}
+
+	bdb, err := meta.OpenBucketDB(localPath)
+	if err != nil {
+		return fmt.Errorf("open local bucket db: %w", err)
+	}
+	export, err := os.CreateTemp(e.localCacheDir, "bucket-repair-*.db")
+	if err != nil {
+		bdb.Close()
+		return fmt.Errorf("create repair export: %w", err)
+	}
+	exportPath := export.Name()
+	export.Close()
+	os.Remove(exportPath)
+	defer os.Remove(exportPath)
+
+	if err := bdb.SaveToFile(exportPath); err != nil {
+		bdb.Close()
+		return fmt.Errorf("export local bucket db: %w", err)
+	}
+	if err := bdb.Close(); err != nil {
+		return fmt.Errorf("close local bucket db: %w", err)
+	}
+
+	remotePath := fmt.Sprintf("%s_meta/%s.db", baseDir, bucketID)
+	if err := locClient.UploadFromFile(ctx, remotePath, exportPath); err != nil {
+		return fmt.Errorf("upload repaired bucket db: %w", err)
+	}
+
+	verify, err := os.CreateTemp(e.localCacheDir, "bucket-repair-verify-*.db")
+	if err != nil {
+		return fmt.Errorf("create repair verify: %w", err)
+	}
+	verifyPath := verify.Name()
+	verify.Close()
+	defer os.Remove(verifyPath)
+
+	if err := locClient.DownloadToFile(ctx, remotePath, verifyPath); err != nil {
+		return fmt.Errorf("download repaired bucket db: %w", err)
+	}
+	if err := meta.ValidateBucketDBFile(verifyPath); err != nil {
+		return fmt.Errorf("validate repaired remote bucket db: %w", err)
 	}
 	return nil
 }
@@ -546,4 +629,21 @@ func replaceFile(src, dst string) error {
 		_ = os.Remove(backup)
 	}
 	return nil
+}
+
+func copyFile(dst, src string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }
