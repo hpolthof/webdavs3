@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/hpolthof/webdavs3/internal/adminui"
 	"github.com/hpolthof/webdavs3/internal/meta"
+	wdv "github.com/hpolthof/webdavs3/internal/webdav"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -116,14 +118,21 @@ func (s *stubAdminStructureDB) LoadFromFile(string) error      { return nil }
 func (s *stubAdminStructureDB) Close() error                   { return nil }
 
 // stubAdminStatsDB
-type stubAdminStatsDB struct{}
+type stubAdminStatsDB struct {
+	totalUsage int64
+}
 
 func (s *stubAdminStatsDB) AddDelta(_, _, _ string, _, _ int64) error { return nil }
-func (s *stubAdminStatsDB) GetTotalUsage(string) (int64, error)       { return 1024, nil }
+func (s *stubAdminStatsDB) GetTotalUsage(string) (int64, error) {
+	if s.totalUsage == 0 {
+		return 1024, nil
+	}
+	return s.totalUsage, nil
+}
 func (s *stubAdminStatsDB) MergeFromFile(string, string, map[string]string) error {
 	return nil
 }
-func (s *stubAdminStatsDB) Flush(_ context.Context, _ interface{}, _ string) error {
+func (s *stubAdminStatsDB) Flush(_ context.Context, _ wdv.Client, _ string) error {
 	return nil
 }
 func (s *stubAdminStatsDB) Close() error { return nil }
@@ -216,6 +225,81 @@ func TestAdminHandlers_ListUsers(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "Alice") {
 		t.Errorf("expected user display name in body: %s", w.Body.String())
+	}
+}
+
+func TestAdminHandlers_DashboardShowsDedupStorage(t *testing.T) {
+	cacheDir := t.TempDir()
+	bucketID := "bucket-1"
+	bucketDB, err := meta.OpenBucketDB(filepath.Join(cacheDir, "bucket-"+bucketID+".db"))
+	if err != nil {
+		t.Fatalf("OpenBucketDB: %v", err)
+	}
+	now := time.Now()
+	for _, key := range []string{"folder-a/file.txt", "folder-b/file.txt"} {
+		if err := bucketDB.PutObject(meta.Object{
+			ID:             key,
+			Key:            key,
+			HashPath:       "/_data/shared",
+			SizeBytes:      1024,
+			ETag:           "etag",
+			ContentType:    "text/plain",
+			LastModified:   now,
+			UploadComplete: true,
+		}); err != nil {
+			t.Fatalf("PutObject(%s): %v", key, err)
+		}
+	}
+	if err := bucketDB.Close(); err != nil {
+		t.Fatalf("Close bucketDB: %v", err)
+	}
+
+	structDB := &stubAdminStructureDB{
+		locations: []meta.Location{{ID: "loc-1", URL: "http://dav", DisplayName: "Local", QuotaBytes: 1 << 30, BaseDir: "/", CreatedAt: now}},
+		users:     []meta.User{{ID: "u-1", AccessKey: "AK123", DisplayName: "Alice", Enabled: true, CreatedAt: now}},
+		buckets:   []meta.Bucket{{ID: bucketID, Name: "photos", OwnerUserID: "u-1", WebDAVLocationID: "loc-1", CreatedAt: now}},
+	}
+	const testEncKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	srv := adminui.NewAdminServer(adminui.AdminDeps{
+		AdminPasswordHash: "$2a$10$UVdKbqzndmqLzRIJu2wrXunPESvTqk6KhPsWb9yCjgdAmKz5MtLBC",
+		AdminUsername:     "admin",
+		EncryptionKey:     testEncKey,
+		Structure:         structDB,
+		Stats:             &stubAdminStatsDB{totalUsage: 2048},
+		LocalCacheDir:     cacheDir,
+	})
+	form := url.Values{"username": {"admin"}, "password": {"secret"}}
+	loginReq := httptest.NewRequest("POST", "/admin/login", strings.NewReader(form.Encode()))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginW := httptest.NewRecorder()
+	srv.ServeHTTP(loginW, loginReq)
+	var sessionCookie *http.Cookie
+	for _, c := range loginW.Result().Cookies() {
+		if c.Name == "session" {
+			sessionCookie = c
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("no session cookie from login")
+	}
+
+	req := httptest.NewRequest("GET", "/admin/", nil)
+	req.AddCookie(sessionCookie)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /admin/: got %d want 200", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "2.00 KB") {
+		t.Fatalf("expected logical usage to render as 2.00 KB in body: %s", body)
+	}
+	if count := strings.Count(body, "1.00 KB"); count < 2 {
+		t.Fatalf("expected actual and saved storage to render as 1.00 KB at least twice, got %d in body: %s", count, body)
+	}
+	if !strings.Contains(body, "Actual") || !strings.Contains(body, "Saved") {
+		t.Fatalf("expected Actual and Saved columns in body: %s", body)
 	}
 }
 

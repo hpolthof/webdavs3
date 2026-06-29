@@ -25,18 +25,20 @@
 <div class="card">
   <div class="card-header"><h3 style="margin:0">Storage Locations</h3><a href="/admin/locations/new" class="btn btn-sm">+ Add Location</a></div>
   <table>
-    <thead><tr><th>Name</th><th>URL</th><th>Usage</th><th>Quota</th><th>Used %</th></tr></thead>
+    <thead><tr><th>Name</th><th>URL</th><th>Usage</th><th>Actual</th><th>Saved</th><th>Quota</th><th>Used %</th></tr></thead>
     <tbody>
     {{range .LocationStats}}
     <tr>
       <td><a href="/admin/locations/{{.Location.ID}}">{{.Location.DisplayName}}</a></td>
       <td><code>{{.Location.URL}}</code></td>
       <td>{{humanBytes .UsageBytes}}</td>
+      <td>{{humanBytes .ActualBytes}}</td>
+      <td>{{humanBytes .SavedBytes}}</td>
       <td>{{if .Location.QuotaBytes}}{{humanBytes .Location.QuotaBytes}}{{else}}Unlimited{{end}}</td>
       <td>{{if .Location.QuotaBytes}}{{printf "%.1f" (quotaPercent .UsageBytes .Location.QuotaBytes)}}%{{else}}—{{end}}</td>
     </tr>
     {{else}}
-    <tr><td colspan="5" class="empty">No locations configured. <a href="/admin/locations/new">Add one</a>.</td></tr>
+    <tr><td colspan="7" class="empty">No locations configured. <a href="/admin/locations/new">Add one</a>.</td></tr>
     {{end}}
     </tbody>
   </table>

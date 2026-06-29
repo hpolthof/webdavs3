@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -31,6 +33,7 @@ type AdminDeps struct {
 	EncryptionKey     string // base64-encoded 32-byte AES-256 key; empty disables encryption
 	Structure         meta.StructureDB
 	Stats             meta.StatsDB
+	LocalCacheDir     string
 	SyncEngine        syncEngine
 	BucketService     bucketService
 	RefreshWebDAV     func()
@@ -197,8 +200,10 @@ func (s *AdminServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	buckets, _ := s.deps.Structure.ListBuckets()
 
 	type locStat struct {
-		Location   meta.Location
-		UsageBytes int64
+		Location    meta.Location
+		UsageBytes  int64
+		ActualBytes int64
+		SavedBytes  int64
 	}
 	var stats []locStat
 	for _, loc := range locs {
@@ -206,7 +211,17 @@ func (s *AdminServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		if s.deps.Stats != nil {
 			usage, _ = s.deps.Stats.GetTotalUsage(loc.ID)
 		}
-		stats = append(stats, locStat{Location: loc, UsageBytes: usage})
+		actual := s.actualUsageBytes(loc.ID, buckets)
+		saved := usage - actual
+		if saved < 0 {
+			saved = 0
+		}
+		stats = append(stats, locStat{
+			Location:    loc,
+			UsageBytes:  usage,
+			ActualBytes: actual,
+			SavedBytes:  saved,
+		})
 	}
 
 	if err := s.tmpls.ExecuteTemplate(w, "dashboard.html", map[string]any{
@@ -218,6 +233,61 @@ func (s *AdminServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		slog.Error("render dashboard", "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
+}
+
+func (s *AdminServer) actualUsageBytes(locationID string, buckets []meta.Bucket) int64 {
+	if s.deps.LocalCacheDir == "" {
+		return 0
+	}
+
+	uniqueData := map[string]int64{}
+	for _, b := range buckets {
+		if b.WebDAVLocationID != locationID {
+			continue
+		}
+		dbPath := filepath.Join(s.deps.LocalCacheDir, "bucket-"+b.ID+".db")
+		if _, err := os.Stat(dbPath); err != nil {
+			if !os.IsNotExist(err) {
+				slog.Warn("stat bucket metadata for physical usage failed", "bucket", b.ID, "err", err)
+			}
+			continue
+		}
+		bdb, err := meta.OpenBucketDB(dbPath)
+		if err != nil {
+			slog.Warn("open bucket metadata for physical usage failed", "bucket", b.ID, "err", err)
+			continue
+		}
+		objects, _, err := bdb.ListObjects("", "", "", 0)
+		closeErr := bdb.Close()
+		if err != nil {
+			slog.Warn("list bucket objects for physical usage failed", "bucket", b.ID, "err", err)
+			continue
+		}
+		if closeErr != nil {
+			slog.Warn("close bucket metadata after physical usage failed", "bucket", b.ID, "err", closeErr)
+		}
+		for _, obj := range objects {
+			fullObj, err := bdb.GetObject(obj.Key)
+			if err == nil {
+				obj = fullObj
+			} else {
+				slog.Warn("load object chunks for physical usage failed", "bucket", b.ID, "key", obj.Key, "err", err)
+			}
+			if len(obj.Chunks) == 0 {
+				uniqueData[obj.HashPath] = obj.SizeBytes
+				continue
+			}
+			for _, chunk := range obj.Chunks {
+				uniqueData[chunk.Path] = chunk.Size
+			}
+		}
+	}
+
+	var total int64
+	for _, size := range uniqueData {
+		total += size
+	}
+	return total
 }
 
 // --- Location handlers ---
