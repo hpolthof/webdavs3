@@ -303,6 +303,81 @@ func TestAdminHandlers_DashboardShowsDedupStorage(t *testing.T) {
 	}
 }
 
+func TestAdminHandlers_DashboardCountsChunkedPhysicalStorage(t *testing.T) {
+	cacheDir := t.TempDir()
+	bucketID := "bucket-chunked"
+	bucketDB, err := meta.OpenBucketDB(filepath.Join(cacheDir, "bucket-"+bucketID+".db"))
+	if err != nil {
+		t.Fatalf("OpenBucketDB: %v", err)
+	}
+	now := time.Now()
+	if err := bucketDB.PutObject(meta.Object{
+		ID:           "chunked-object",
+		Key:          "video.bin",
+		HashPath:     "",
+		SizeBytes:    3000,
+		ETag:         "etag",
+		ContentType:  "application/octet-stream",
+		LastModified: now,
+		Chunks: []meta.ChunkRef{
+			{PartNumber: 1, Path: "/_parts/upload-1/1", Size: 1024, MD5Hex: "aaa"},
+			{PartNumber: 2, Path: "/_parts/upload-1/2", Size: 2048, MD5Hex: "bbb"},
+		},
+		UploadComplete: true,
+	}); err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+	if err := bucketDB.Close(); err != nil {
+		t.Fatalf("Close bucketDB: %v", err)
+	}
+
+	structDB := &stubAdminStructureDB{
+		locations: []meta.Location{{ID: "loc-1", URL: "http://dav", DisplayName: "Local", QuotaBytes: 1 << 30, BaseDir: "/", CreatedAt: now}},
+		users:     []meta.User{{ID: "u-1", AccessKey: "AK123", DisplayName: "Alice", Enabled: true, CreatedAt: now}},
+		buckets:   []meta.Bucket{{ID: bucketID, Name: "media", OwnerUserID: "u-1", WebDAVLocationID: "loc-1", CreatedAt: now}},
+	}
+	const testEncKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	srv := adminui.NewAdminServer(adminui.AdminDeps{
+		AdminPasswordHash: "$2a$10$UVdKbqzndmqLzRIJu2wrXunPESvTqk6KhPsWb9yCjgdAmKz5MtLBC",
+		AdminUsername:     "admin",
+		EncryptionKey:     testEncKey,
+		Structure:         structDB,
+		Stats:             &stubAdminStatsDB{totalUsage: 3072},
+		LocalCacheDir:     cacheDir,
+	})
+	form := url.Values{"username": {"admin"}, "password": {"secret"}}
+	loginReq := httptest.NewRequest("POST", "/admin/login", strings.NewReader(form.Encode()))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginW := httptest.NewRecorder()
+	srv.ServeHTTP(loginW, loginReq)
+	var sessionCookie *http.Cookie
+	for _, c := range loginW.Result().Cookies() {
+		if c.Name == "session" {
+			sessionCookie = c
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("no session cookie from login")
+	}
+
+	req := httptest.NewRequest("GET", "/admin/", nil)
+	req.AddCookie(sessionCookie)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /admin/: got %d want 200", w.Code)
+	}
+	body := w.Body.String()
+	if count := strings.Count(body, "3.00 KB"); count < 2 {
+		t.Fatalf("expected logical and actual usage to render as 3.00 KB, got %d in body: %s", count, body)
+	}
+	if strings.Contains(body, "Saved") && strings.Contains(body, "0 B") {
+		return
+	}
+	t.Fatalf("expected saved storage to render as 0 B in body: %s", body)
+}
+
 func TestAdminHandlers_NewLocation(t *testing.T) {
 	srv, cookie, structDB, syncEngine := buildAuthedAdminServerWithDBAndSync(t)
 

@@ -258,13 +258,12 @@ func (s *AdminServer) actualUsageBytes(locationID string, buckets []meta.Bucket)
 			continue
 		}
 		objects, _, err := bdb.ListObjects("", "", "", 0)
-		closeErr := bdb.Close()
 		if err != nil {
+			if closeErr := bdb.Close(); closeErr != nil {
+				slog.Warn("close bucket metadata after physical usage failed", "bucket", b.ID, "err", closeErr)
+			}
 			slog.Warn("list bucket objects for physical usage failed", "bucket", b.ID, "err", err)
 			continue
-		}
-		if closeErr != nil {
-			slog.Warn("close bucket metadata after physical usage failed", "bucket", b.ID, "err", closeErr)
 		}
 		for _, obj := range objects {
 			fullObj, err := bdb.GetObject(obj.Key)
@@ -280,6 +279,9 @@ func (s *AdminServer) actualUsageBytes(locationID string, buckets []meta.Bucket)
 			for _, chunk := range obj.Chunks {
 				uniqueData[chunk.Path] = chunk.Size
 			}
+		}
+		if closeErr := bdb.Close(); closeErr != nil {
+			slog.Warn("close bucket metadata after physical usage failed", "bucket", b.ID, "err", closeErr)
 		}
 	}
 
