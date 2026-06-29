@@ -26,7 +26,7 @@ func newSessionStore() *sessionStore {
 }
 
 // create generates a new session token for the given access key, stores it, and sets the cookie.
-func (s *sessionStore) create(w http.ResponseWriter, accessKey string) string {
+func (s *sessionStore) create(w http.ResponseWriter, r *http.Request, accessKey string) string {
 	var b [32]byte
 	rand.Read(b[:])
 	token := hex.EncodeToString(b[:])
@@ -41,7 +41,7 @@ func (s *sessionStore) create(w http.ResponseWriter, accessKey string) string {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   secureCookie(r),
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expires,
 	})

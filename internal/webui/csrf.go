@@ -21,7 +21,7 @@ func newCSRFStore() *csrfStore {
 }
 
 // newToken generates a fresh CSRF token, stores it in a cookie, and returns the token.
-func (c *csrfStore) newToken(w http.ResponseWriter) string {
+func (c *csrfStore) newToken(w http.ResponseWriter, r *http.Request) string {
 	var b [32]byte
 	rand.Read(b[:])
 	token := hex.EncodeToString(b[:])
@@ -36,7 +36,7 @@ func (c *csrfStore) newToken(w http.ResponseWriter) string {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   secureCookie(r),
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expires,
 	})

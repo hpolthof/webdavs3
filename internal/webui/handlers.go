@@ -22,7 +22,7 @@ func (s *Server) handleGetLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.tmpls.ExecuteTemplate(w, "login.html", map[string]any{
-		"CSRFToken": s.csrf.newToken(w),
+		"CSRFToken": s.csrf.newToken(w, r),
 	}); err != nil {
 		slog.Error("render login", "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
@@ -50,13 +50,13 @@ func (s *Server) handlePostLogin(w http.ResponseWriter, r *http.Request) {
 		s.renderLogin(w, r, "Invalid credentials")
 		return
 	}
-	s.sessions.create(w, accessKey)
+	s.sessions.create(w, r, accessKey)
 	http.Redirect(w, r, "/buckets", http.StatusSeeOther)
 }
 
 func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, errorMsg string) {
 	if err := s.tmpls.ExecuteTemplate(w, "login.html", map[string]any{
-		"CSRFToken": s.csrf.newToken(w),
+		"CSRFToken": s.csrf.newToken(w, r),
 		"Error":     errorMsg,
 	}); err != nil {
 		slog.Error("render login", "err", err)
@@ -85,7 +85,7 @@ func (s *Server) handleListBuckets(w http.ResponseWriter, r *http.Request) {
 		"Buckets":          buckets,
 		"SidebarBuckets":   buckets,
 		"StorageUsedBytes": s.storageUsedBytes(r.Context(), buckets),
-		"CSRFToken":        s.csrf.newToken(w),
+		"CSRFToken":        s.csrf.newToken(w, r),
 		"HasLocations":     s.hasLocations(),
 	}); err != nil {
 		slog.Error("render buckets", "err", err)
@@ -127,7 +127,7 @@ func (s *Server) renderListBuckets(w http.ResponseWriter, r *http.Request, error
 		"Buckets":          buckets,
 		"SidebarBuckets":   buckets,
 		"StorageUsedBytes": s.storageUsedBytes(r.Context(), buckets),
-		"CSRFToken":        s.csrf.newToken(w),
+		"CSRFToken":        s.csrf.newToken(w, r),
 		"Error":            errorMsg,
 		"HasLocations":     s.hasLocations(),
 	}); err != nil {
@@ -215,7 +215,7 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 		"Prefix":            prefix,
 		"Objects":           objects,
 		"CommonPrefixes":    result.CommonPrefixes,
-		"CSRFToken":         s.csrf.newToken(w),
+		"CSRFToken":         s.csrf.newToken(w, r),
 	}
 	tmpl := "browse.html"
 	if isHTMX(r) {

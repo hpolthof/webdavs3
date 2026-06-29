@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -334,6 +335,53 @@ func TestWebUI_LoginSuccess(t *testing.T) {
 	cookies := login(t, srv)
 	if len(cookies) == 0 {
 		t.Fatal("expected session cookie after login")
+	}
+}
+
+func TestWebUI_LoginSuccessOverHTTPWithBrowserCookieJar(t *testing.T) {
+	srv, _, _ := buildWebUIServer(t)
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("create cookie jar: %v", err)
+	}
+	client := ts.Client()
+	client.Jar = jar
+
+	resp, err := client.Get(ts.URL + "/login")
+	if err != nil {
+		t.Fatalf("GET /login: %v", err)
+	}
+	bodyBytes, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatalf("read login body: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /login: got %d want 200", resp.StatusCode)
+	}
+	body := string(bodyBytes)
+	const prefix = `name="csrf_token" value="`
+	idx := strings.Index(body, prefix)
+	if idx == -1 {
+		t.Fatalf("csrf token not found in body: %s", body)
+	}
+	rest := body[idx+len(prefix):]
+	end := strings.Index(rest, `"`)
+	if end == -1 {
+		t.Fatalf("csrf token value not terminated")
+	}
+
+	form := url.Values{"access_key": {"AK123"}, "password": {"webpass"}, "csrf_token": {rest[:end]}}
+	resp, err = client.PostForm(ts.URL+"/login", form)
+	if err != nil {
+		t.Fatalf("POST /login: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || resp.Request.URL.Path != "/buckets" {
+		t.Fatalf("POST /login final response: got status %d path %s want 200 /buckets", resp.StatusCode, resp.Request.URL.Path)
 	}
 }
 
