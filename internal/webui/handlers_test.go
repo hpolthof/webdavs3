@@ -385,6 +385,41 @@ func TestWebUI_LoginSuccessOverHTTPWithBrowserCookieJar(t *testing.T) {
 	}
 }
 
+func TestWebUI_LoginAcceptsValidCSRFAfterStaleDuplicateCookie(t *testing.T) {
+	srv, _, _ := buildWebUIServer(t)
+	token, cookies := csrfToken(t, srv, nil, "/login")
+	form := url.Values{"access_key": {"AK123"}, "password": {"webpass"}, "csrf_token": {token}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "webui_csrf", Value: "stale-token"})
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("POST /login with stale duplicate CSRF cookie: got %d want redirect; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestWebUI_LoginCSRFSurvivesServerInstanceChange(t *testing.T) {
+	oldSrv, _, _ := buildWebUIServer(t)
+	token, cookies := csrfToken(t, oldSrv, nil, "/login")
+
+	newSrv, _, _ := buildWebUIServer(t)
+	form := url.Values{"access_key": {"AK123"}, "password": {"webpass"}, "csrf_token": {token}}
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	w := httptest.NewRecorder()
+	newSrv.ServeHTTP(w, req)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("POST /login after server instance change: got %d want redirect; body: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestWebUI_LoginBadPassword(t *testing.T) {
 	srv, _, _ := buildWebUIServer(t)
 	token, cookies := csrfToken(t, srv, nil, "/login")
