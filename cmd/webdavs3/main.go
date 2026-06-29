@@ -315,6 +315,7 @@ func runDaemon(ctx context.Context, cfgPath string) error {
 		EncryptionKey:     cfg.EncryptionKey,
 		Structure:         structDB,
 		Stats:             statsDB,
+		LocalCacheDir:     cfg.LocalCacheDir,
 		SyncEngine:        syncEngine,
 		BucketService:     bucketSvc,
 		RefreshWebDAV:     refreshWebDAV,
