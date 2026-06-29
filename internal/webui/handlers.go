@@ -21,9 +21,7 @@ func (s *Server) handleGetLogin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/buckets", http.StatusSeeOther)
 		return
 	}
-	if err := s.tmpls.ExecuteTemplate(w, "login.html", map[string]any{
-		"CSRFToken": s.csrf.newToken(w, r),
-	}); err != nil {
+	if err := s.tmpls.ExecuteTemplate(w, "login.html", nil); err != nil {
 		slog.Error("render login", "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
@@ -32,10 +30,6 @@ func (s *Server) handleGetLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePostLogin(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	if !s.csrf.valid(r, r.FormValue("csrf_token")) {
-		s.renderLogin(w, r, "Invalid or expired session. Please try again.")
 		return
 	}
 	accessKey := r.FormValue("access_key")
@@ -56,8 +50,7 @@ func (s *Server) handlePostLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, errorMsg string) {
 	if err := s.tmpls.ExecuteTemplate(w, "login.html", map[string]any{
-		"CSRFToken": s.csrf.newToken(w, r),
-		"Error":     errorMsg,
+		"Error": errorMsg,
 	}); err != nil {
 		slog.Error("render login", "err", err)
 		http.Error(w, "template error", http.StatusInternalServerError)

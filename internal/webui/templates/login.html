@@ -15,7 +15,6 @@
       <div class="flash flash-error">{{.Error}}</div>
     {{end}}
     <form method="POST" action="/login" class="auth-form">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <label for="access_key">Access key</label>
       <input id="access_key" name="access_key" required autofocus>
       <label for="password">Password</label>
