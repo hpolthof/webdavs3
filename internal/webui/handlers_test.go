@@ -274,43 +274,6 @@ func buildWebUIServer(t *testing.T) (*webui.Server, *stubStructureDB, *stubObjec
 	return srv, structDB, objSvc
 }
 
-func csrfToken(t *testing.T, srv *webui.Server, cookies []*http.Cookie, path string) (token string, mergedCookies []*http.Cookie) {
-	t.Helper()
-	req := httptest.NewRequest("GET", path, nil)
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("GET %s: got %d want 200", path, w.Code)
-	}
-	body := w.Body.String()
-	const prefix = `name="csrf_token" value="`
-	idx := strings.Index(body, prefix)
-	if idx == -1 {
-		t.Fatalf("csrf token not found on %s", path)
-	}
-	rest := body[idx+len(prefix):]
-	end := strings.Index(rest, `"`)
-	if end == -1 {
-		t.Fatalf("csrf token value not terminated")
-	}
-	// Merge response cookies into input cookies so the session cookie is preserved.
-	cookieMap := map[string]*http.Cookie{}
-	for _, c := range cookies {
-		cookieMap[c.Name] = c
-	}
-	for _, c := range w.Result().Cookies() {
-		cookieMap[c.Name] = c
-	}
-	merged := make([]*http.Cookie, 0, len(cookieMap))
-	for _, c := range cookieMap {
-		merged = append(merged, c)
-	}
-	return rest[:end], merged
-}
-
 func login(t *testing.T, srv *webui.Server) []*http.Cookie {
 	t.Helper()
 	form := url.Values{"access_key": {"AK123"}, "password": {"webpass"}}
@@ -370,7 +333,7 @@ func TestWebUI_LoginSuccessOverHTTPWithBrowserCookieJar(t *testing.T) {
 	}
 }
 
-func TestWebUI_LoginDoesNotRequireCSRFToken(t *testing.T) {
+func TestWebUI_LoginAcceptsPlainFormPost(t *testing.T) {
 	srv, _, _ := buildWebUIServer(t)
 	form := url.Values{"access_key": {"AK123"}, "password": {"webpass"}}
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
@@ -582,8 +545,7 @@ func TestWebUI_CreateAndDeleteBucket(t *testing.T) {
 	cookies := login(t, srv)
 
 	// Create
-	token, cookies := csrfToken(t, srv, cookies, "/buckets")
-	form := url.Values{"name": {"new-bucket"}, "csrf_token": {token}}
+	form := url.Values{"name": {"new-bucket"}}
 	req := httptest.NewRequest("POST", "/buckets", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {
@@ -596,8 +558,7 @@ func TestWebUI_CreateAndDeleteBucket(t *testing.T) {
 	}
 
 	// Delete
-	token, cookies = csrfToken(t, srv, cookies, "/buckets")
-	form2 := url.Values{"name": {"new-bucket"}, "csrf_token": {token}}
+	form2 := url.Values{"name": {"new-bucket"}}
 	req2 := httptest.NewRequest("POST", "/buckets/new-bucket/delete", strings.NewReader(form2.Encode()))
 	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {
@@ -615,8 +576,7 @@ func TestWebUI_CreateBucketRequiresLocation(t *testing.T) {
 	structDB.locations = nil
 	cookies := login(t, srv)
 
-	token, cookies := csrfToken(t, srv, cookies, "/buckets")
-	form := url.Values{"name": {"new-bucket"}, "csrf_token": {token}}
+	form := url.Values{"name": {"new-bucket"}}
 	req := httptest.NewRequest("POST", "/buckets", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {
@@ -821,12 +781,10 @@ func TestWebUI_BrowseLevelUpLinkGoesToParentPrefix(t *testing.T) {
 func TestWebUI_UploadAndDownload(t *testing.T) {
 	srv, _, _ := buildWebUIServer(t)
 	cookies := login(t, srv)
-	token, cookies := csrfToken(t, srv, cookies, "/buckets/my-bucket/browse")
 
 	var b bytes.Buffer
 	mw := multipart.NewWriter(&b)
 	_ = mw.WriteField("prefix", "")
-	_ = mw.WriteField("csrf_token", token)
 	fw, _ := mw.CreateFormFile("file", "upload.txt")
 	fw.Write([]byte("uploaded content"))
 	mw.Close()
@@ -861,8 +819,7 @@ func TestWebUI_DeleteObject(t *testing.T) {
 	cookies := login(t, srv)
 	objSvc.Put(context.Background(), "my-bucket", "delete-me.txt", "text/plain", 4, strings.NewReader("bye!"))
 
-	token, cookies := csrfToken(t, srv, cookies, "/buckets/my-bucket/browse")
-	form := url.Values{"key": {"delete-me.txt"}, "csrf_token": {token}}
+	form := url.Values{"key": {"delete-me.txt"}}
 	req := httptest.NewRequest("POST", "/buckets/my-bucket/objects/delete", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {
@@ -882,9 +839,8 @@ func TestWebUI_DeleteObject(t *testing.T) {
 func TestWebUI_Mkdir(t *testing.T) {
 	srv, _, objSvc := buildWebUIServer(t)
 	cookies := login(t, srv)
-	token, cookies := csrfToken(t, srv, cookies, "/buckets/my-bucket/browse")
 
-	form := url.Values{"prefix": {""}, "name": {"newfolder"}, "csrf_token": {token}}
+	form := url.Values{"prefix": {""}, "name": {"newfolder"}}
 	req := httptest.NewRequest("POST", "/buckets/my-bucket/mkdir", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {
@@ -909,8 +865,7 @@ func TestWebUI_RenameObject(t *testing.T) {
 	cookies := login(t, srv)
 	objSvc.Put(context.Background(), "my-bucket", "old.txt", "text/plain", 5, strings.NewReader("hello"))
 
-	token, cookies := csrfToken(t, srv, cookies, "/buckets/my-bucket/browse")
-	form := url.Values{"key": {"old.txt"}, "newKey": {"renamed.txt"}, "csrf_token": {token}}
+	form := url.Values{"key": {"old.txt"}, "newKey": {"renamed.txt"}}
 	req := httptest.NewRequest("POST", "/buckets/my-bucket/objects/rename", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {
@@ -944,8 +899,7 @@ func TestWebUI_RenameFolderMovesPrefixContents(t *testing.T) {
 	objSvc.Put(context.Background(), "my-bucket", "old/", "application/x-directory", 0, strings.NewReader(""))
 	objSvc.Put(context.Background(), "my-bucket", "old/report.txt", "text/plain", 7, strings.NewReader("content"))
 
-	token, cookies := csrfToken(t, srv, cookies, "/buckets/my-bucket/browse")
-	form := url.Values{"key": {"old/"}, "newKey": {"renamed"}, "csrf_token": {token}}
+	form := url.Values{"key": {"old/"}, "newKey": {"renamed"}}
 	req := httptest.NewRequest("POST", "/buckets/my-bucket/objects/rename", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {

@@ -115,7 +115,7 @@ function createUploadQueue({ queueElement, target, form }) {
     renderQueue();
 
     try {
-      await uploadFile(action, currentCSRFToken(), prefix, next.file, (progress) => {
+      await uploadFile(action, prefix, next.file, (progress) => {
         next.progress = progress;
         renderQueue();
       });
@@ -172,22 +172,7 @@ function createUploadQueue({ queueElement, target, form }) {
       throw new Error("Could not refresh file list");
     }
     const html = await response.text();
-    updateCSRFToken(response);
     target.innerHTML = html;
-  }
-
-  function currentCSRFToken() {
-    return form.querySelector('input[name="csrf_token"]')?.value || "";
-  }
-
-  function updateCSRFToken(response) {
-    const nextToken = response.headers.get("X-WebUI-CSRF-Token");
-    if (!nextToken) return;
-
-    const tokenInputs = document.querySelectorAll('input[name="csrf_token"]');
-    for (const tokenInput of tokenInputs) {
-      tokenInput.value = nextToken;
-    }
   }
 }
 
@@ -237,11 +222,10 @@ function statusLabel(status, progress) {
   }
 }
 
-function uploadFile(action, csrfToken, prefix, file, onProgress) {
+function uploadFile(action, prefix, file, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
-    formData.append("csrf_token", csrfToken);
     formData.append("prefix", prefix);
     formData.append("file", file);
 

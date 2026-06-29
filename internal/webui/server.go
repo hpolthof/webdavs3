@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
-	"log/slog"
 	"net/http"
 	"path"
 	"strings"
@@ -33,7 +32,6 @@ type Deps struct {
 type Server struct {
 	deps     Deps
 	sessions *sessionStore
-	csrf     *csrfStore
 	mux      *http.ServeMux
 	tmpls    *template.Template
 }
@@ -76,7 +74,6 @@ func NewServer(deps Deps) *Server {
 	s := &Server{
 		deps:     deps,
 		sessions: newSessionStore(),
-		csrf:     newCSRFStore(),
 		mux:      http.NewServeMux(),
 	}
 
@@ -138,16 +135,6 @@ func (s *Server) requireSession(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxUserKey, user)))
 	})
-}
-
-// csrfOrForbidden validates the CSRF token for POST requests.
-func (s *Server) csrfOrForbidden(w http.ResponseWriter, r *http.Request) bool {
-	if !s.csrf.valid(r, r.FormValue("csrf_token")) {
-		slog.Warn("csrf validation failed", "path", r.URL.Path)
-		http.Error(w, "Forbidden: invalid CSRF token", http.StatusForbidden)
-		return false
-	}
-	return true
 }
 
 // isHTMX returns true if the request was made by HTMX.

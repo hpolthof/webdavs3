@@ -78,7 +78,6 @@ func (s *Server) handleListBuckets(w http.ResponseWriter, r *http.Request) {
 		"Buckets":          buckets,
 		"SidebarBuckets":   buckets,
 		"StorageUsedBytes": s.storageUsedBytes(r.Context(), buckets),
-		"CSRFToken":        s.csrf.newToken(w, r),
 		"HasLocations":     s.hasLocations(),
 	}); err != nil {
 		slog.Error("render buckets", "err", err)
@@ -89,9 +88,6 @@ func (s *Server) handleListBuckets(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreateBucket(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	if !s.csrfOrForbidden(w, r) {
 		return
 	}
 	user := userFromCtx(r.Context())
@@ -120,7 +116,6 @@ func (s *Server) renderListBuckets(w http.ResponseWriter, r *http.Request, error
 		"Buckets":          buckets,
 		"SidebarBuckets":   buckets,
 		"StorageUsedBytes": s.storageUsedBytes(r.Context(), buckets),
-		"CSRFToken":        s.csrf.newToken(w, r),
 		"Error":            errorMsg,
 		"HasLocations":     s.hasLocations(),
 	}); err != nil {
@@ -159,9 +154,6 @@ func (s *Server) hasLocations() bool {
 func (s *Server) handleDeleteBucket(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	if !s.csrfOrForbidden(w, r) {
 		return
 	}
 	name := r.PathValue("name")
@@ -208,11 +200,9 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 		"Prefix":            prefix,
 		"Objects":           objects,
 		"CommonPrefixes":    result.CommonPrefixes,
-		"CSRFToken":         s.csrf.newToken(w, r),
 	}
 	tmpl := "browse.html"
 	if isHTMX(r) {
-		w.Header().Set("X-WebUI-CSRF-Token", data["CSRFToken"].(string))
 		tmpl = "browse_fragment.html"
 	}
 	if err := s.tmpls.ExecuteTemplate(w, tmpl, data); err != nil {
@@ -262,9 +252,6 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad upload", http.StatusBadRequest)
 		return
 	}
-	if !s.csrfOrForbidden(w, r) {
-		return
-	}
 	bkt, err := s.requireBucketAccess(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
@@ -295,9 +282,6 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	if !s.csrfOrForbidden(w, r) {
-		return
-	}
 	bkt, err := s.requireBucketAccess(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
@@ -316,9 +300,6 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteObject(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	if !s.csrfOrForbidden(w, r) {
 		return
 	}
 	bkt, err := s.requireBucketAccess(r)
@@ -371,9 +352,6 @@ func (s *Server) deletePrefix(ctx context.Context, bucketName, prefix string) er
 func (s *Server) handleRenameObject(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	if !s.csrfOrForbidden(w, r) {
 		return
 	}
 	bkt, err := s.requireBucketAccess(r)
