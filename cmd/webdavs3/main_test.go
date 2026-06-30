@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,6 +103,51 @@ func TestDaemonID_EmptyDir(t *testing.T) {
 	if id == "" {
 		t.Fatal("expected non-empty ID")
 	}
+}
+
+func TestRunHealthcheck_AdminLoginOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/admin/login" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfgPath := writeHealthcheckConfig(t, strings.TrimPrefix(srv.URL, "http://"))
+
+	if err := runHealthcheck(cfgPath); err != nil {
+		t.Fatalf("runHealthcheck: %v", err)
+	}
+}
+
+func TestRunHealthcheck_AdminLoginNonOKFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	cfgPath := writeHealthcheckConfig(t, strings.TrimPrefix(srv.URL, "http://"))
+
+	err := runHealthcheck(cfgPath)
+	if err == nil {
+		t.Fatal("expected runHealthcheck to fail")
+	}
+	if !strings.Contains(err.Error(), "503") {
+		t.Fatalf("expected status in error, got: %v", err)
+	}
+}
+
+func writeHealthcheckConfig(t *testing.T, adminListen string) string {
+	t.Helper()
+	t.Setenv("WEBDAV3S_ADMIN_LISTEN", "")
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgYAML := "admin_listen: '" + adminListen + "'\n"
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return cfgPath
 }
 
 func setupGCTestConfig(t *testing.T) string {

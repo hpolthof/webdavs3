@@ -308,6 +308,19 @@ For Docker, Coolify, and similar platforms, mount `provision.yaml` as a read-onl
 
 The runtime image is `scratch`, so there is no shell or package manager in the final container. Use `docker logs` for inspection, or build a temporary debug image from the same Dockerfile builder stage if you need an interactive troubleshooting shell.
 
+For Coolify healthchecks, use the built-in command instead of `curl` or `wget`:
+
+```text
+Type: CMD
+Command: /webdavs3 healthcheck
+Interval: 10
+Timeout: 5
+Retries: 3
+Start Period: 15
+```
+
+The command loads the same config and environment overrides as the daemon, then checks `http://127.0.0.1:<admin_port>/admin/login`. If you pass a config file to the daemon, pass the same file to the healthcheck, for example `/webdavs3 healthcheck /etc/webdavs3/config.yaml`.
+
 Example build command:
 
 ```bash

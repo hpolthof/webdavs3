@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -95,6 +96,15 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "healthcheck":
+			if len(os.Args) > 2 {
+				cfgPath = os.Args[2]
+			}
+			if err := runHealthcheck(cfgPath); err != nil {
+				fmt.Fprintf(os.Stderr, "healthcheck: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		case "provision":
 			if len(os.Args) > 2 && os.Args[2] == "dump" {
 				if len(os.Args) > 3 {
@@ -113,6 +123,7 @@ func main() {
 			fmt.Println("  webdavs3 inspect [--json] [--bucket <name>] [config.yaml]")
 			fmt.Println("                                                   inspect metadata integrity and remote storage")
 			fmt.Println("  webdavs3 gc [--force] [config.yaml]             remove orphaned files from all WebDAV locations")
+			fmt.Println("  webdavs3 healthcheck [config.yaml]              check the admin HTTP endpoint")
 			fmt.Println("  webdavs3 provision dump [config.yaml]           export current provisioning state as YAML")
 			return
 		default:
@@ -427,6 +438,41 @@ func runDaemon(ctx context.Context, cfgPath string) error {
 	}
 
 	return ctx.Err()
+}
+
+func runHealthcheck(cfgPath string) error {
+	cfg, err := LoadConfig(cfgPath)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	url, err := adminHealthcheckURL(cfg.AdminListen)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return fmt.Errorf("GET %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET %s: unexpected status %d", url, resp.StatusCode)
+	}
+	return nil
+}
+
+func adminHealthcheckURL(listen string) (string, error) {
+	host, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return "", fmt.Errorf("parse admin_listen %q: %w", listen, err)
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/admin/login", nil
 }
 
 // loadOrCreateDaemonID reads the daemon.id file from dir or creates a new UUID v4.
