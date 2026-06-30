@@ -306,7 +306,7 @@ If you prefer Compose, keep the tag pinned to a release such as `ghcr.io/hpoltho
 
 For Docker, Coolify, and similar platforms, mount `provision.yaml` as a read-only file inside the container and point `WEBDAV3S_PROVISION_FILE` at that path. Use this only for first boot of a fresh `local_cache_dir`; once the instance has been provisioned, the next startup with the same cache directory will fail if the file is still enforced against existing state.
 
-The runtime image is `scratch`, so there is no shell or package manager in the final container. Use `docker logs` for inspection, or build a temporary debug image from the same Dockerfile builder stage if you need an interactive troubleshooting shell.
+The runtime image is based on Alpine and includes `/bin/sh` so platforms that run healthchecks through a shell, such as Coolify, can execute the built-in healthcheck command. Use `docker logs` for inspection.
 
 For Coolify healthchecks, use the built-in command instead of `curl` or `wget`:
 

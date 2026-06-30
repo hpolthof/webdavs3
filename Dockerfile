@@ -22,9 +22,10 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 
 RUN upx --best --lzma /out/webdavs3
 
-FROM scratch
+FROM alpine:3.22
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN apk add --no-cache ca-certificates
+
 COPY --from=builder /out/webdavs3 /webdavs3
 
 EXPOSE 9000 9001
