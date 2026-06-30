@@ -187,5 +187,27 @@ func (s *statsDB) Flush(ctx context.Context, wdc wdv.Client, remotePath string) 
 	if _, err := s.db.Exec(`VACUUM INTO ?`, tmpPath); err != nil {
 		return fmt.Errorf("vacuum into temp: %w", err)
 	}
+	if err := pruneImportedStats(tmpPath); err != nil {
+		return fmt.Errorf("prune imported stats: %w", err)
+	}
 	return wdc.UploadFromFile(ctx, remotePath, tmpPath)
+}
+
+func pruneImportedStats(path string) error {
+	db, err := openSQLite(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`DELETE FROM usage_delta WHERE source_file <> ''`); err != nil {
+		return err
+	}
+	if err := checkpointSQLite(db); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`VACUUM`); err != nil {
+		return err
+	}
+	return nil
 }

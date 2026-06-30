@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -119,5 +120,59 @@ func TestStatsDB_Flush(t *testing.T) {
 	// File should have been uploaded
 	if _, ok := wdClient.files[remotePath]; !ok {
 		t.Error("expected stats file to be uploaded to mock WebDAV")
+	}
+}
+
+func TestStatsDB_FlushExcludesMergedRemoteStats(t *testing.T) {
+	dir := t.TempDir()
+
+	sourcePath := filepath.Join(dir, "stats-remote.db")
+	sourceDB, err := meta.OpenStatsDB(sourcePath, "daemon-remote")
+	if err != nil {
+		t.Fatalf("OpenStatsDB source: %v", err)
+	}
+	if err := sourceDB.AddDelta("loc-1", "u-1", "bkt-1", 1000, 1); err != nil {
+		t.Fatalf("AddDelta source: %v", err)
+	}
+	if err := sourceDB.Close(); err != nil {
+		t.Fatalf("Close source: %v", err)
+	}
+
+	db, err := meta.OpenStatsDB(":memory:", "daemon-local")
+	if err != nil {
+		t.Fatalf("OpenStatsDB local: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.MergeFromFile(sourcePath, "stats-daemon-remote.db", nil); err != nil {
+		t.Fatalf("MergeFromFile: %v", err)
+	}
+	if err := db.AddDelta("loc-1", "u-1", "bkt-1", 50, 1); err != nil {
+		t.Fatalf("AddDelta local: %v", err)
+	}
+
+	wdClient := newMockWebDAV()
+	remotePath := "/_meta/stats-daemon-local.db"
+	if err := db.Flush(context.Background(), wdClient, remotePath); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	flushedPath := filepath.Join(dir, "flushed.db")
+	if err := os.WriteFile(flushedPath, wdClient.files[remotePath], 0600); err != nil {
+		t.Fatalf("write flushed db: %v", err)
+	}
+
+	flushedDB, err := meta.OpenStatsDB(flushedPath, "check")
+	if err != nil {
+		t.Fatalf("OpenStatsDB flushed: %v", err)
+	}
+	defer flushedDB.Close()
+
+	usage, err := flushedDB.GetTotalUsage("loc-1")
+	if err != nil {
+		t.Fatalf("GetTotalUsage flushed: %v", err)
+	}
+	if usage != 50 {
+		t.Fatalf("flushed usage got %d want only local delta 50", usage)
 	}
 }
